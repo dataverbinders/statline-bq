@@ -1,14 +1,30 @@
 [tool.poetry]
 name = "statline-bq"
 version = "0.1.0"
-description = ""
-authors = ["amitgal <amitgalmail@gmail.com>"]
+description = "Library to upload CBS open datasets into Google Cloud Platform"
+authors = ["Daniel Kapitan <daniel@kapitan.net>", "Amit Gal <amitgalmail@gmail.com>"]
+license = "MIT"
+homepage = "https://wijzijn.dedataverbinders.nl/"
 
 [tool.poetry.dependencies]
 python = "^3.8"
+click = "^7.1.2"
+dask = "^2.21.0"
+google-auth = "^1.19.2"
+google-cloud-core = "^1.3.0"
+google-cloud-bigquery = "^1.26.1"
+google-cloud-storage = "^1.30.0"
+prefect = "^0.12.5"
+requests = "^2.24.0"
+pyarrow = "^1.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
+black = "^19.10b0"
+flake8 = "^3.8.3"
+ipykernel = "^5.3.4"
+ipython = "^7.16.1"
+pdoc3 = "^0.8.4"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
