@@ -5,9 +5,10 @@ import toml
 
 @click.command()
 # @click.argument("config", type=click.File("r"))
-@click.argument("dataset", type=str)
+@click.argument("dataset")
 def upload_datasets(dataset):
     """
     This explains what this CLI is about
     """
-    commands.cbsodatav4_to_gcs(dataset)
+    commands.cbs_odata_to_gcs(dataset)
+    # click.echo(dataset)

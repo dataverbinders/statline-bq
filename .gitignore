@@ -73,3 +73,7 @@ ENV/
 !.vscode/launch.json 
 !.vscode/extensions.json 
 .history
+
+# temp folders
+temp/
+statline-bq/temp

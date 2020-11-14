@@ -1,4 +1,3 @@
-import click
 import subprocess
 from typing import Union
 import os
@@ -111,6 +110,7 @@ def check_v4(id: str, third_party: bool = False) -> bool:
         v4 = True
     else:
         v4 = False
+    return v4
 
 
 def get_odata_v3(
@@ -279,62 +279,67 @@ def upload_to_gcs(
     return None  # TODO: Return suceess/failure??
 
 
-# def cbsodatav3_to_gcs(id, third_party=False, schema="cbs", credentials=None, GCP=None):
-#     """Load CBS odata v3 into Google Cloud Storage as parquet files.
-#     For given dataset id, following tables are uploaded into schema (taking `cbs` as default and `83583NED` as example):
-#     - cbs.83583NED_DataProperties: description of topics and dimensions contained in table
-#     - cbs.83583NED_DimensionName: separate dimension tables
-#     - cbs.83583NED_TypedDataSet: the TypedDataset
-#     - cbs.83583NED_CategoryGroups: grouping of dimensions
-#     See Handleiding CBS Open Data Services (v3)[^odatav3] for details.
+def cbsodatav3_to_gcs(id, third_party=False, schema="cbs", credentials=None, GCP=None):
+    """Load CBS odata v3 into Google Cloud Storage as parquet files.
+    For given dataset id, following tables are uploaded into schema (taking `cbs` as default and `83583NED` as example):
+    - cbs.83583NED_DataProperties: description of topics and dimensions contained in table
+    - cbs.83583NED_DimensionName: separate dimension tables
+    - cbs.83583NED_TypedDataSet: the TypedDataset
+    - cbs.83583NED_CategoryGroups: grouping of dimensions
+    See Handleiding CBS Open Data Services (v3)[^odatav3] for details.
 
-#     Args:
-#         - id (str): table ID like `83583NED`
-#         - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
-#         - schema (str): schema to load data into
-#         - credentials: GCP credentials
-#         - GCP: config object
-#     Return:
-#         - List[google.cloud.bigquery.job.LoadJob]
-#     [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-opendata-services.pdf
-#     """
+    Args:
+        - id (str): table ID like `83583NED`
+        - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
+        - schema (str): schema to load data into
+        - credentials: GCP credentials
+        - GCP: config object
+    Return:
+        - List[google.cloud.bigquery.job.LoadJob]
+    [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-opendata-services.pdf
+    """
+    odata_version = "v3"
 
-#     base_url = {
-#         True: f"https://dataderden.cbs.nl/ODataFeed/odata/{id}?$format=json",
-#         False: f"https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json",
-#     }
-#     urls = {
-#         item["name"]: item["url"]
-#         for item in requests.get(base_url[third_party]).json()["value"]
-#     }
+    base_url = {
+        True: f"https://dataderden.cbs.nl/ODataFeed/odata/{id}?$format=json",
+        False: f"https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json",
+    }
+    urls = {
+        item["name"]: item["url"]
+        for item in requests.get(base_url[third_party]).json()["value"]
+    }
 
-#     # TableInfos is redundant --> use https://opendata.cbs.nl/ODataCatalog/Tables?$format=json
-#     # UntypedDataSet is redundant --> use TypedDataSet
-#     for key, url in [
-#         (k, v) for k, v in urls.items() if k not in ("TableInfos", "UntypedDataSet")
-#     ]:
-#         url = "?".join((url, "$format=json"))
+    # Create placeholders for storage
+    files_parquet = set()
+    pq_dir = Path(
+        f"./temp/{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+    )
+    create_dir(pq_dir)
 
-#         # Create table name to be used in GCS
-#         table_name = f"{schema}.{id}_{key}"
+    # TableInfos is redundant --> use https://opendata.cbs.nl/ODataCatalog/Tables?$format=json
+    # UntypedDataSet is redundant --> use TypedDataSet
+    for key, url in [
+        (k, v) for k, v in urls.items() if k not in ("TableInfos", "UntypedDataSet")
+    ]:
+        url = "?".join((url, "$format=json"))
 
-#         # Get data from source
-#         table = get_odata_v3(url)
+        # Create table name to be used in GCS
+        table_name = (
+            f"{schema}.{id}_{key}"  # Maybe remove schema? is stated via folder.
+        )
 
-#         # Convert to parquet
-#         pq_path = convert_table_to_parquet(table, table_name, pq_dir)
+        # Get data from source
+        table = get_odata_v3(url)
 
-#         # Add path of file to set
-#         files_parquet.add(pq_path)
+        # Convert to parquet
+        pq_path = convert_table_to_parquet(table, table_name, pq_dir)
 
-#             # each request limited to 10,000 cells
-#             if "odata.nextLink" in r:
-#                 i += 1
-#                 url = r["odata.nextLink"]
-#             else:
-#                 url = None
+        # Add path of file to set
+        files_parquet.add(pq_path)
 
-#     return jobs
+    upload_to_gcs(pq_dir, schema, odata_version, id)
+
+    return upload_to_gcs
 
 
 def cbsodatav4_to_gcs(
@@ -388,10 +393,12 @@ def cbsodatav4_to_gcs(
 
     # Create placeholders for storage
     files_parquet = set()
-    pq_dir = Path(f"./temp/{datetime.today().date().strftime('%Y%m%d')}/parquet")
+    pq_dir = Path(
+        f"./temp/{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+    )
     create_dir(pq_dir)
 
-    ## Downloading datasets from CBS and converting to Parquet
+    ## Download datasets from CBS and converting to Parquet
 
     # Iterate over all tables related to dataset, excepet Properties (TODO -> double check that it is redundandt)
     for key, url in [
@@ -403,7 +410,9 @@ def cbsodatav4_to_gcs(
     ]:
 
         # Create table name to be used in GCS
-        table_name = f"{schema}.{id}_{key}"
+        table_name = (
+            f"{schema}.{id}_{key}"  # Maybe remove schema? is stated via folder.
+        )
 
         # Get data from source
         table = get_odata_v4(url)
@@ -414,20 +423,9 @@ def cbsodatav4_to_gcs(
         # Add path of file to set
         files_parquet.add(pq_path)
 
-    ## Uploading to GCS
+    # Upload to GCS
 
     upload_to_gcs(pq_dir, schema, odata_version, id)
-
-    # # Initialize Google Storage Client, get bucket, set blob (TODO -> write as a different function?)
-    # # gcs = storage.Client(project=GCP.project)  #when used with GCP Class
-    # gcs = storage.Client(project="dataverbinders-dev")
-    # gcs_bucket = gcs.get_bucket("dataverbinders-dev_test")
-    # gcs_folder = (
-    #     f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
-    # )
-    # for pfile in os.listdir(pq_dir):
-    #     gcs_blob = gcs_bucket.blob(gcs_folder + "/" + pfile)
-    #     gcs_blob.upload_from_filename(pq_dir / pfile)
 
     return files_parquet  # , data_set_description
 
@@ -446,4 +444,4 @@ def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs
 
 
 if __name__ == "__main__":
-    cbsodatav4_to_gcs("82807NED")
+    cbs_odata_to_gcs("83583NED")
