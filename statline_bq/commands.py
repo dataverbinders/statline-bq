@@ -89,6 +89,69 @@ def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=
     return bag
 
 
+def check_v4(id: str, third_party: bool = False) -> bool:
+    """
+    Check whether a certain CBS table exists as odata v4
+
+    Args:
+        - id (str): table ID like `83583NED`
+        - third_party (boolean): 'odata4.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl (not available in v4 yet)        
+
+    Returns:
+        - v4 (bool): True if exists as odata v4, False otherwise
+    """
+    base_url = {
+        True: None,  # currently no IV3 links in ODATA V4,
+        False: f"https://odata4.cbs.nl/CBS/{id}",
+    }
+    r = requests.get(base_url[third_party])
+    if (
+        r.status_code == 200
+    ):  # TODO: Is this the best check to use? Maybe if not 404? Or something else?
+        v4 = True
+    else:
+        v4 = False
+
+
+def get_odata_v3(
+    target_url: str,
+):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
+    # TODO -> Change requests to CURL command
+    """Gets a table from a specific url for CBS Odata v3.
+
+    Args:
+        - target_url (str): url of the table
+
+    Returns:
+        - data (Dask bag): all data received from target url as json type, in a Dask bag
+    """
+    # First call target url and get json formatted response as dict
+    r = requests.get(target_url).json()
+    # Create Dask bag from dict (check if not empty field)
+    if r["value"]:
+        bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
+
+    # check if more data exists
+    if "@odata.nextLink" in r:
+        target_url = r["@odata.nextLink"]
+    else:
+        target_url = None
+
+    # if more data exists continue to concat bag until complete
+    while target_url:
+        r = requests.get(target_url).json()
+        if r["value"]:
+            temp_bag = db.from_sequence(r["value"])
+            bag = db.concat([bag, temp_bag])
+
+        if "@odata.nextLink" in r:
+            target_url = r["@odata.nextLink"]
+        else:
+            target_url = None
+
+    return bag
+
+
 def get_odata_v4(
     target_url: str,
 ):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
@@ -96,7 +159,7 @@ def get_odata_v4(
     """Gets a table from a specific url for CBS Odata v4.
 
     Args:
-        - url_table_properties (str): url of the table
+        - target_url (str): url of the table
 
     Returns:
         - data (Dask bag): all data received from target url as json type, in a Dask bag
@@ -178,8 +241,106 @@ def convert_table_to_parquet(
     return pq_path
 
 
+def upload_to_gcs(
+    dir: Path, schema: str, odata_version: str, id: str
+):  # TODO: Take GCP object from config file
+    """Uploads all files in a given directory to GCS, using the following structure:
+    'project_name/bucket_name/schema/odata_version/id/YYYYMMDD/filename'
+    
+    Meant to be used for uploading all tables for a certain dataset retrieved from CBS API,
+    and hence to upload (for example) into:
+        'dataverbinders/dataverbinders/cbs/v4/83765NED/
+    The following datasetsfiles:
+        - cbs.82807NED_Observations.parquet
+        - cbs.82807NED_PeriodenCodes.parquet
+        - etc...
+    
+    Args:
+        - dir: A Path object to a directory containing files to be uploaded
+        - schema: schema to load data into
+        - odata_version: 'v4' or 'v3', stating the version of the original odata retrieved
+        - id (str): table ID like `83583NED`
+
+    Returns:
+        - None  # TODO -> Return success/ fail code?
+    """
+    # Initialize Google Storage Client, get bucket, set blob
+    # gcs = storage.Client(project=GCP.project)  #when used with GCP Class
+    gcs = storage.Client(project="dataverbinders-dev")
+    gcs_bucket = gcs.get_bucket("dataverbinders-dev_test")
+    gcs_folder = (
+        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
+    )
+    # Upload file
+    for pfile in os.listdir(dir):
+        gcs_blob = gcs_bucket.blob(gcs_folder + "/" + pfile)
+        gcs_blob.upload_from_filename(dir / pfile)
+
+    return None  # TODO: Return suceess/failure??
+
+
+# def cbsodatav3_to_gcs(id, third_party=False, schema="cbs", credentials=None, GCP=None):
+#     """Load CBS odata v3 into Google Cloud Storage as parquet files.
+#     For given dataset id, following tables are uploaded into schema (taking `cbs` as default and `83583NED` as example):
+#     - cbs.83583NED_DataProperties: description of topics and dimensions contained in table
+#     - cbs.83583NED_DimensionName: separate dimension tables
+#     - cbs.83583NED_TypedDataSet: the TypedDataset
+#     - cbs.83583NED_CategoryGroups: grouping of dimensions
+#     See Handleiding CBS Open Data Services (v3)[^odatav3] for details.
+
+#     Args:
+#         - id (str): table ID like `83583NED`
+#         - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
+#         - schema (str): schema to load data into
+#         - credentials: GCP credentials
+#         - GCP: config object
+#     Return:
+#         - List[google.cloud.bigquery.job.LoadJob]
+#     [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-opendata-services.pdf
+#     """
+
+#     base_url = {
+#         True: f"https://dataderden.cbs.nl/ODataFeed/odata/{id}?$format=json",
+#         False: f"https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json",
+#     }
+#     urls = {
+#         item["name"]: item["url"]
+#         for item in requests.get(base_url[third_party]).json()["value"]
+#     }
+
+#     # TableInfos is redundant --> use https://opendata.cbs.nl/ODataCatalog/Tables?$format=json
+#     # UntypedDataSet is redundant --> use TypedDataSet
+#     for key, url in [
+#         (k, v) for k, v in urls.items() if k not in ("TableInfos", "UntypedDataSet")
+#     ]:
+#         url = "?".join((url, "$format=json"))
+
+#         # Create table name to be used in GCS
+#         table_name = f"{schema}.{id}_{key}"
+
+#         # Get data from source
+#         table = get_odata_v3(url)
+
+#         # Convert to parquet
+#         pq_path = convert_table_to_parquet(table, table_name, pq_dir)
+
+#         # Add path of file to set
+#         files_parquet.add(pq_path)
+
+#             # each request limited to 10,000 cells
+#             if "odata.nextLink" in r:
+#                 i += 1
+#                 url = r["odata.nextLink"]
+#             else:
+#                 url = None
+
+#     return jobs
+
+
 def cbsodatav4_to_gcs(
-    id: str, schema: str = "cbs", third_party=False
+    id: str,
+    schema: str = "cbs",
+    third_party=False,  # TODO - add GCP and credentials to arguments
 ):  # TODO -> Add GCS and Paths config objects
     """Load CBS odata v4 into Google Cloud Storage as Parquet.
 
@@ -221,8 +382,8 @@ def cbsodatav4_to_gcs(
         item["name"]: base_url[third_party] + "/" + item["url"]
         for item in get_odata_v4(base_url[third_party])
     }
-    # Get the description of the data set
-    data_set_description = get_table_description_v4(urls["Properties"])
+    # # Get the description of the data set  # Currently not used - maybe move to a different place?
+    # data_set_description = get_table_description_v4(urls["Properties"])
 
     # gcs_bucket = gcs.bucket(GCP.bucket)
 
@@ -256,22 +417,20 @@ def cbsodatav4_to_gcs(
 
     ## Uploading to GCS
 
-    # Initialize Google Storage Client, get bucket, set blob (TODO -> consider structure in GCS)
-    # gcs = storage.Client(project=GCP.project)  #when used with GCP Class
-    gcs = storage.Client(project="dataverbinders-dev")
-    gcs_bucket = gcs.get_bucket("dataverbinders-dev_test")
-    gcs_folder = (
-        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
-    )
-    for pfile in os.listdir(pq_dir):
-        gcs_blob = gcs_bucket.blob(gcs_folder + "/" + pfile)
-        gcs_blob.upload_from_filename(pq_dir / pfile)
+    upload_to_gcs(pq_dir, schema, odata_version, id)
 
-    return files_parquet, data_set_description
+    # # Initialize Google Storage Client, get bucket, set blob (TODO -> write as a different function?)
+    # # gcs = storage.Client(project=GCP.project)  #when used with GCP Class
+    # gcs = storage.Client(project="dataverbinders-dev")
+    # gcs_bucket = gcs.get_bucket("dataverbinders-dev_test")
+    # gcs_folder = (
+    #     f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
+    # )
+    # for pfile in os.listdir(pq_dir):
+    #     gcs_blob = gcs_bucket.blob(gcs_folder + "/" + pfile)
+    #     gcs_blob.upload_from_filename(pq_dir / pfile)
 
-
-# def main():
-#     main
+    return files_parquet  # , data_set_description
 
 
 if __name__ == "__main__":
