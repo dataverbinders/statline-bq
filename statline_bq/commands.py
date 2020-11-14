@@ -1,4 +1,5 @@
 import click
+import subprocess
 from typing import Union
 import os
 from pathlib import Path
@@ -42,6 +43,50 @@ def get_table_description_v4(url_table_properties: str) -> str:
     """
     r = requests.get(url_table_properties).json()
     return r["Description"]
+
+
+def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=100000 ath the end - returns same data as first link
+    target_url: str,
+):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
+    """Gets a table from a specific url for CBS Odata v4.
+
+    Args:
+        - url_table_properties (str): url of the table
+
+    Returns:
+        - data (Dask bag): all data received from target url as json type, in a Dask bag
+    """
+    # First call target url and get json formatted response as dict
+    temp_file = "odata.json"
+    # r = requests.get(target_url).json()
+    subprocess.run(["curl", "-fL", "-o", temp_file, target_url])
+    # Parse json file as dict
+    with open(temp_file) as f:
+        r = json.load(f)
+    # Create Dask bag from dict
+    bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
+
+    # check if more data exists
+    if "@odata.nextLink" in r:
+        target_url = r["@odata.nextLink"]
+    else:
+        target_url = None
+
+    # if more data exists continue to concat bag until complete
+    while target_url:
+        subprocess.run(["curl", "-fL", "-o", temp_file, target_url])
+        # Parse json file as dict
+        with open(temp_file) as f:
+            r = json.load(f)
+        temp_bag = db.from_sequence(r["value"])
+        bag = db.concat([bag, temp_bag])
+
+        if "@odata.nextLink" in r:
+            target_url = r["@odata.nextLink"]
+        else:
+            target_url = None
+
+    return bag
 
 
 def get_odata_v4(
@@ -225,8 +270,8 @@ def cbsodatav4_to_gcs(
     return files_parquet, data_set_description
 
 
-def main():
-    main
+# def main():
+#     main
 
 
 if __name__ == "__main__":
