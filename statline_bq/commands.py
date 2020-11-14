@@ -371,7 +371,6 @@ def cbsodatav4_to_gcs(
         - Set: Paths to Parquet files
         - String: table_description
     """
-
     odata_version = "v4"
 
     base_url = {
@@ -431,6 +430,19 @@ def cbsodatav4_to_gcs(
     #     gcs_blob.upload_from_filename(pq_dir / pfile)
 
     return files_parquet  # , data_set_description
+
+
+def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs
+    id: str,
+    schema: str = "cbs",
+    third_party=False,  # TODO - add GCP and credentials to arguments
+):  # TODO -> Add GCS and Paths config objects):
+
+    # Check if v4
+    if check_v4(id=id, third_party=third_party):
+        cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party)
+    else:
+        cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party)
 
 
 if __name__ == "__main__":
