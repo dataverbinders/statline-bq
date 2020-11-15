@@ -266,9 +266,6 @@ def upload_to_gcs(
         - None  # TODO -> Return success/ fail code?
     """
     # Initialize Google Storage Client, get bucket, set blob
-    print(f"type(gcp) = {type(gcp)}")
-    print(f'gcp["project"] = {gcp["project"]}')
-    print(f"gcp.keys() = {gcp.keys()}")
     gcs = storage.Client(
         project=gcp["project"]
     )  # TODO: is class better here? why? where to implement?

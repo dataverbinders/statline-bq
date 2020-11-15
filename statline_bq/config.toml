@@ -1,6 +1,7 @@
 [gcp]
 project = "dataverbinders-dev"
 bucket = "dataverbinders-dev_test"
+# location = "EU"  # currently not used/implemented
 
 [datasets]
 datasets = [
