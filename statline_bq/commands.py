@@ -10,6 +10,7 @@ from datetime import datetime
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
 from google.cloud import storage
+import toml
 
 
 def create_dir(path: Path) -> Path:
@@ -433,7 +434,7 @@ def cbsodatav4_to_gcs(
 def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs
     id: str,
     schema: str = "cbs",
-    third_party=False,  # TODO - add GCP and credentials to arguments
+    third_party: bool = False,  # TODO - add GCP and credentials to arguments
 ):  # TODO -> Add GCS and Paths config objects):
 
     # Check if v4
@@ -441,6 +442,7 @@ def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs
         cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party)
     else:
         cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party)
+    return None
 
 
 if __name__ == "__main__":
