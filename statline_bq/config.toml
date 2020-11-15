@@ -1,7 +1,10 @@
 [gcp]
 project = "dataverbinders-dev"
 bucket = "dataverbinders-dev_test"
+<<<<<<< HEAD
 # location = "EU"  # currently not used/implemented
+=======
+>>>>>>> get gcp project and bucket from config.toml file
 
 [datasets]
 datasets = [
