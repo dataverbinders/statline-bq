@@ -431,17 +431,21 @@ def cbsodatav4_to_gcs(
     return files_parquet  # , data_set_description
 
 
-def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs
+def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs(?)
     id: str,
     schema: str = "cbs",
     third_party: bool = False,  # TODO - add GCP and credentials to arguments
 ):  # TODO -> Add GCS and Paths config objects):
 
+    print(f"Processing dataset {id}")
     # Check if v4
     if check_v4(id=id, third_party=third_party):
         cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party)
     else:
         cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party)
+    print(
+        f"Completed dataset {id}"
+    )  # TODO - add response from google if possible (some success/failure flag)
     return None
 
 

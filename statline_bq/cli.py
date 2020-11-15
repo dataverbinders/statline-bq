@@ -23,6 +23,13 @@ def upload_datasets():
     config_file = Path("./statline_bq/config.toml")
     with open(config_file) as conf:
         config = toml.load(conf)
+
+    datasets = config["datasets"]["datasets"]
+    # gcp = config["gcp"]
+
+    click.echo(f"The following datasets will be uploaded:")
+    for dataset in datasets:
+        click.echo(f"{dataset}")
     for dataset in config["datasets"]["datasets"]:
         commands.cbs_odata_to_gcs(dataset)
         # commands.cbs_odata(dataset, )
