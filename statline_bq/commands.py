@@ -243,7 +243,7 @@ def convert_table_to_parquet(
 
 
 def upload_to_gcs(
-    dir: Path, schema: str, odata_version: str, id: str
+    dir: Path, schema: str, odata_version: str, id: str, gcp: dict
 ):  # TODO: Take GCP object from config file
     """Uploads all files in a given directory to GCS, using the following structure:
     'project_name/bucket_name/schema/odata_version/id/YYYYMMDD/filename'
@@ -266,9 +266,15 @@ def upload_to_gcs(
         - None  # TODO -> Return success/ fail code?
     """
     # Initialize Google Storage Client, get bucket, set blob
-    # gcs = storage.Client(project=GCP.project)  #when used with GCP Class
-    gcs = storage.Client(project="dataverbinders-dev")
-    gcs_bucket = gcs.get_bucket("dataverbinders-dev_test")
+    print(f"type(gcp) = {type(gcp)}")
+    print(f'gcp["project"] = {gcp["project"]}')
+    print(f"gcp.keys() = {gcp.keys()}")
+    gcs = storage.Client(
+        project=gcp["project"]
+    )  # TODO: is class better here? why? where to implement?
+    gcs_bucket = gcs.get_bucket(gcp["bucket"])
+    # gcs = storage.Client(project="dataverbinders-dev")
+    # gcs_bucket = gcs.get_bucket("dataverbinders-dev_test")
     gcs_folder = (
         f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
     )
@@ -280,7 +286,9 @@ def upload_to_gcs(
     return None  # TODO: Return suceess/failure??
 
 
-def cbsodatav3_to_gcs(id, third_party=False, schema="cbs", credentials=None, GCP=None):
+def cbsodatav3_to_gcs(
+    id: str, third_party: bool = False, schema: str = "cbs", gcp: dict = None
+):
     """Load CBS odata v3 into Google Cloud Storage as parquet files.
     For given dataset id, following tables are uploaded into schema (taking `cbs` as default and `83583NED` as example):
     - cbs.83583NED_DataProperties: description of topics and dimensions contained in table
@@ -338,15 +346,13 @@ def cbsodatav3_to_gcs(id, third_party=False, schema="cbs", credentials=None, GCP
         # Add path of file to set
         files_parquet.add(pq_path)
 
-    upload_to_gcs(pq_dir, schema, odata_version, id)
+    upload_to_gcs(pq_dir, schema, odata_version, id, gcp)
 
     return upload_to_gcs
 
 
 def cbsodatav4_to_gcs(
-    id: str,
-    schema: str = "cbs",
-    third_party=False,  # TODO - add GCP and credentials to arguments
+    id: str, schema: str = "cbs", third_party: bool = False, gcp: dict = None
 ):  # TODO -> Add GCS and Paths config objects
     """Load CBS odata v4 into Google Cloud Storage as Parquet.
 
@@ -426,7 +432,7 @@ def cbsodatav4_to_gcs(
 
     # Upload to GCS
 
-    upload_to_gcs(pq_dir, schema, odata_version, id)
+    upload_to_gcs(pq_dir, schema, odata_version, id, gcp)
 
     return files_parquet  # , data_set_description
 
@@ -434,15 +440,16 @@ def cbsodatav4_to_gcs(
 def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs(?)
     id: str,
     schema: str = "cbs",
-    third_party: bool = False,  # TODO - add GCP and credentials to arguments
+    third_party: bool = False,
+    gcp: dict = None,  # TODO - add GCP and credentials to arguments
 ):  # TODO -> Add GCS and Paths config objects):
 
     print(f"Processing dataset {id}")
     # Check if v4
     if check_v4(id=id, third_party=third_party):
-        cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party)
+        cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party, gcp=gcp)
     else:
-        cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party)
+        cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party, gcp=gcp)
     print(
         f"Completed dataset {id}"
     )  # TODO - add response from google if possible (some success/failure flag)

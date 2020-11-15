@@ -1,7 +1,9 @@
 [gcp]
+project = "dataverbinders-dev"
+bucket = "dataverbinders-dev_test"
 
 [datasets]
 datasets = [
-    '83583NED',
-    '83765NED'
+    "83583NED",
+    "83765NED"
     ]
