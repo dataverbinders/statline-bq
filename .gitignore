@@ -47,6 +47,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+statline_bq/testing.ipynb
 
 # IPython
 profile_default/
