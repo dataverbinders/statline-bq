@@ -5,6 +5,7 @@ gcp = {
 }
 
 client = bigquery.Client(project=gcp["project"])
+# dataset_id = "test_from_gcs"
 dataset_id = "dso"  # DATASET NEEDS TO EXIST TODO: Create dataset if doesn't exist?
 
 dataset_ref = bigquery.DatasetReference(gcp["project"], dataset_id)
