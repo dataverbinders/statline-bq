@@ -1,5 +1,5 @@
 import subprocess
-from typing import Union
+from typing import Union, NamedTuple
 import os
 from pathlib import Path
 from glob import glob
@@ -11,6 +11,7 @@ from pyarrow import json as pa_json
 import pyarrow.parquet as pq
 from google.cloud import storage
 import toml
+from collections import namedtuple
 
 
 def create_dir(path: Path) -> Path:
@@ -242,9 +243,7 @@ def convert_table_to_parquet(
     return pq_path
 
 
-def upload_to_gcs(
-    dir: Path, schema: str, odata_version: str, id: str, gcp: dict
-):  # TODO: Take GCP object from config file
+def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: dict):
     """Uploads all files in a given directory to GCS, using the following structure:
     'project_name/bucket_name/schema/odata_version/id/YYYYMMDD/filename'
     
@@ -266,12 +265,8 @@ def upload_to_gcs(
         - None  # TODO -> Return success/ fail code?
     """
     # Initialize Google Storage Client, get bucket, set blob
-    gcs = storage.Client(
-        project=gcp["project"]
-    )  # TODO: is class better here? why? where to implement?
-    gcs_bucket = gcs.get_bucket(gcp["bucket"])
-    # gcs = storage.Client(project="dataverbinders-dev")
-    # gcs_bucket = gcs.get_bucket("dataverbinders-dev_test")
+    gcs = storage.Client(project=gcp.project)
+    gcs_bucket = gcs.get_bucket(gcp.bucket)
     gcs_folder = (
         f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
     )
@@ -350,7 +345,7 @@ def cbsodatav3_to_gcs(
 
 def cbsodatav4_to_gcs(
     id: str, schema: str = "cbs", third_party: bool = False, gcp: dict = None
-):  # TODO -> Add GCS and Paths config objects
+):  # TODO -> Add Paths config objects
     """Load CBS odata v4 into Google Cloud Storage as Parquet.
 
     For a given dataset id, the following tables are ALWAYS uploaded into GCS
@@ -435,11 +430,8 @@ def cbsodatav4_to_gcs(
 
 
 def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs(?)
-    id: str,
-    schema: str = "cbs",
-    third_party: bool = False,
-    gcp: dict = None,  # TODO - add GCP and credentials to arguments
-):  # TODO -> Add GCS and Paths config objects):
+    id: str, schema: str = "cbs", third_party: bool = False, gcp: dict = None,
+):  # TODO -> Add Paths config object):
 
     print(f"Processing dataset {id}")
     # Check if v4
@@ -453,5 +445,24 @@ def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs(?)
     return None
 
 
-if __name__ == "__main__":
-    cbs_odata_to_gcs("83583NED")
+def parse_config_toml(config_file: Union[Path, str]) -> NamedTuple:
+    """Parse out a toml file, and returns a named tuple wit
+    """
+    # Convert to Path if string
+    config_file = Path(config_file)
+    # Parse toml file as dict
+    with open(config_file) as conf:
+        config_dict = toml.load(conf)
+    # Convert datasets list to tuple
+    datasets = tuple(config_dict["datasets"]["datasets"])
+    # Convert GCP dict to named tuple
+    GCP = namedtuple("GCP", [key for key in config_dict["gcp"].keys()])
+    gcp = GCP(**config_dict["gcp"])
+    # Creat a namedtuple 'Config' to hold datasets tuple and GCP named tuple
+    Config = namedtuple("Config", ["datasets", "gcp"])
+    config = Config(datasets=datasets, gcp=gcp)
+    return config
+
+
+# if __name__ == "__main__":
+#     cbs_odata_to_gcs("83583NED")
