@@ -446,7 +446,15 @@ def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs(?)
 
 
 def parse_config_toml(config_file: Union[Path, str]) -> NamedTuple:
-    """Parse out a toml file, and returns a named tuple wit
+    """Parse out a toml file, and returns a named tuple contating the parsed config.toml file:
+
+    Args:
+        - config_file: a Path (or string) to the config.toml file
+    
+    Returns:
+        - config: a named tuple holding the following data from config.toml:
+            - config.GCP: a named tuple containing the GCP parameters (such as project and bucket)
+            - config.datasets: a tuple holding all dataset ids as strings
     """
     # Convert to Path if string
     config_file = Path(config_file)
