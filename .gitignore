@@ -77,4 +77,6 @@ ENV/
 
 # temp folders
 temp/
-statline-bq/temp
+
+# tseting notebook
+testing.ipynb
