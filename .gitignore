@@ -77,4 +77,7 @@ ENV/
 
 # temp folders
 temp/
-statline-bq/temp
+statline_bq/temp
+
+# jupyter notebook
+statline_bq/testing.ipynb
