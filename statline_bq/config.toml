@@ -4,11 +4,16 @@ bucket = "dataverbinders-dev_test"
 <<<<<<< HEAD
 <<<<<<< HEAD
 # location = "EU"  # currently not used/implemented
+<<<<<<< HEAD
 =======
 >>>>>>> get gcp project and bucket from config.toml file
 =======
 # location = "EU"  # currently not used/implemented
 >>>>>>> remove development print statements
+=======
+# credentials = "" # currently not taken here. User needs to have authentication setup previous to using this library.
+                   # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
+>>>>>>> convert config from dict to named tuple
 
 [datasets]
 datasets = [
