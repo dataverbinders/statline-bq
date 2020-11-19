@@ -279,7 +279,7 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: dict
 
 
 def cbsodatav3_to_gcs(
-    id: str, third_party: bool = False, schema: str = "cbs", gcp: dict = None
+    id: str, third_party: bool = False, schema: str = "cbs", config: NamedTuple = None
 ):
     """Load CBS odata v3 into Google Cloud Storage as parquet files.
     For given dataset id, following tables are uploaded into schema (taking `cbs` as default and `83583NED` as example):
@@ -293,8 +293,7 @@ def cbsodatav3_to_gcs(
         - id (str): table ID like `83583NED`
         - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
         - schema (str): schema to load data into
-        - credentials: GCP credentials
-        - GCP: config object
+        - config: config object containing list of datasets (not used), GCP parameters and paths for temp folders
     Return:
         - List[google.cloud.bigquery.job.LoadJob]
     [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-opendata-services.pdf
@@ -310,10 +309,14 @@ def cbsodatav3_to_gcs(
         for item in requests.get(base_url[third_party]).json()["value"]
     }
 
+    # Take config paths
+    root = config.paths.root
+    temp = root / config.paths.temp
+
     # Create placeholders for storage
     files_parquet = set()
-    pq_dir = Path(
-        f"./temp/{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+    pq_dir = temp / Path(
+        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
     create_dir(pq_dir)
 
@@ -338,13 +341,13 @@ def cbsodatav3_to_gcs(
         # Add path of file to set
         files_parquet.add(pq_path)
 
-    upload_to_gcs(pq_dir, schema, odata_version, id, gcp)
+    upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
 
     return upload_to_gcs
 
 
 def cbsodatav4_to_gcs(
-    id: str, schema: str = "cbs", third_party: bool = False, gcp: dict = None
+    id: str, schema: str = "cbs", third_party: bool = False, config: NamedTuple = None
 ):  # TODO -> Add Paths config objects
     """Load CBS odata v4 into Google Cloud Storage as Parquet.
 
@@ -367,13 +370,10 @@ def cbsodatav4_to_gcs(
         - id (str): table ID like `83583NED`
         - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
         - schema (str): schema to load data into
-        - credentials: GCP credentials
-        - GCP: config object
-        - paths: config object for output directory
+        - config: config object containing list of datasets (not used), GCP parameters and paths for temp folders
 
     Return:
         - Set: Paths to Parquet files
-        - String: table_description
     """
     odata_version = "v4"
 
@@ -385,15 +385,17 @@ def cbsodatav4_to_gcs(
         item["name"]: base_url[third_party] + "/" + item["url"]
         for item in get_odata_v4(base_url[third_party])
     }
-    # # Get the description of the data set  # Currently not used - maybe move to a different place?
+    # # Get the description of the data set  # TODO: Currently not used - move to a different place
     # data_set_description = get_table_description_v4(urls["Properties"])
 
-    # gcs_bucket = gcs.bucket(GCP.bucket)
+    # Take config paths
+    root = config.paths.root
+    temp = root / config.paths.temp
 
     # Create placeholders for storage
     files_parquet = set()
-    pq_dir = Path(
-        f"./temp/{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+    pq_dir = temp / Path(
+        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
     create_dir(pq_dir)
 
@@ -424,28 +426,30 @@ def cbsodatav4_to_gcs(
 
     # Upload to GCS
 
-    upload_to_gcs(pq_dir, schema, odata_version, id, gcp)
+    upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
 
-    return files_parquet  # , data_set_description
+    return files_parquet
 
 
 def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs(?)
-    id: str, schema: str = "cbs", third_party: bool = False, gcp: dict = None,
-):  # TODO -> Add Paths config object):
+    id: str, schema: str = "cbs", third_party: bool = False, config: NamedTuple = None,
+):
 
     print(f"Processing dataset {id}")
     # Check if v4
     if check_v4(id=id, third_party=third_party):
-        cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party, gcp=gcp)
+        cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party, config=config)
     else:
-        cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party, gcp=gcp)
+        cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party, config=config)
     print(
         f"Completed dataset {id}"
     )  # TODO - add response from google if possible (some success/failure flag)
     return None
 
 
-def parse_config_toml(config_file: Union[Path, str]) -> NamedTuple:
+def parse_config_toml(
+    config_file: Union[Path, str]
+) -> NamedTuple:  # TODO: Currently can only take specific specified values: datasets, gcp and paths. Can we abstract away addition of fields in config.toml, and keep conversion to tuples?
     """Parse out a toml file, and returns a named tuple contating the parsed config.toml file:
 
     Args:
@@ -466,11 +470,16 @@ def parse_config_toml(config_file: Union[Path, str]) -> NamedTuple:
     # Convert GCP dict to named tuple
     GCP = namedtuple("GCP", [key for key in config_dict["gcp"].keys()])
     gcp = GCP(**config_dict["gcp"])
+    # Change all string paths to Path items
+    for name, path_string in config_dict["paths"].items():
+        if name == "root":
+            config_dict["paths"][name] = Path.home() / Path(path_string)
+        else:
+            config_dict["paths"][name] = Path(path_string)
+    # Convert Paths dict to named tuple
+    Paths = namedtuple("Paths", [key for key in config_dict["paths"].keys()])
+    paths = Paths(**config_dict["paths"])
     # Creat a namedtuple 'Config' to hold datasets tuple and GCP named tuple
-    Config = namedtuple("Config", ["datasets", "gcp"])
-    config = Config(datasets=datasets, gcp=gcp)
+    Config = namedtuple("Config", ["datasets", "gcp", "paths"])
+    config = Config(datasets=datasets, gcp=gcp, paths=paths)
     return config
-
-
-# if __name__ == "__main__":
-#     cbs_odata_to_gcs("83583NED")

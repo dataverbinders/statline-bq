@@ -1,13 +1,21 @@
 [gcp]
+# Google cloud project parameters are defined here
 project = "dataverbinders-dev"
 bucket = "dataverbinders-dev_test"
 # location = "EU"  # currently not used/implemented
 # credentials = "" # currently not taken here. User needs to have authentication setup previous to using this library.
                    # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
 
-
 [datasets]
+# Datasets to download from CBS and upload to GCP are defined here
 datasets = [
     "83583NED",
     "83765NED"
     ]
+
+[paths]
+# Temporary paths to use for transformations are defined here.
+# All data paths are relative to "Path.home()/root"
+root = "Projects/statline-bq"
+temp = "temp"
+# cbs = "cbs"
