@@ -311,10 +311,14 @@ def cbsodatav3_to_gcs(
         for item in requests.get(base_url[third_party]).json()["value"]
     }
 
+    # Get paths from config object
+    root = Path.home() / Path(config.paths.root)
+    temp = root / Path(config.paths.temp)
+
     # Create placeholders for storage
     files_parquet = set()
-    pq_dir = Path(
-        f"./temp/{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+    pq_dir = temp / Path(
+        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
     create_dir(pq_dir)
 
@@ -389,12 +393,14 @@ def cbsodatav4_to_gcs(
     # # Get the description of the data set  # Currently not used - maybe move to a different place?
     # data_set_description = get_table_description_v4(urls["Properties"])
 
-    # gcs_bucket = gcs.bucket(GCP.bucket)
+    # Get paths from config object
+    root = Path.home() / Path(config.paths.root)
+    temp = root / Path(config.paths.temp)
 
     # Create placeholders for storage
     files_parquet = set()
-    pq_dir = Path(
-        f"./temp/{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+    pq_dir = temp / Path(
+        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
     create_dir(pq_dir)
 
