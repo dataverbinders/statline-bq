@@ -20,6 +20,7 @@ pyarrow = "^1.0.0"
 fsspec = "^0.8.4"
 toml = "^0.10.2"
 pyserde = {extras = ["toml"], version = "^0.2.0"}
+tomlkit = "^0.7.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

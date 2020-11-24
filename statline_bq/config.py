@@ -4,6 +4,7 @@ from serde import serialize, deserialize
 from serde.toml import from_toml
 from pathlib import Path
 from typing import Union
+from tomlkit import parse
 
 
 @deserialize
@@ -59,15 +60,19 @@ def get_config(config_file: Union[Path, str]):
     return config
 
 
-def get_datasets(config_file: Union[Path, str]):
+def get_datasets(config_file: Union[Path, str]) -> tuple:
     """Checks whether the field 'Datasets' is filled within the config file,
-    and returns a tuple(/list???) of with the datasets' strings if exists, or
+    and returns a tuple of with the datasets' strings if exists, or
     None if it does not.
     """
     config_file = Path(config_file)
+    with open(config_file, "r") as f:
+        doc = parse(f.read())
+    return tuple(doc["datasets"]["ids"])
 
 
 if __name__ == "__main__":
-    config_path = Path("statline_bq/config.toml")
+    config_path = Path("./statline_bq/config.toml")
     config = get_config(config_path)
-    print(config.paths)
+    datasets = get_datasets(config_path)
+    print(datasets)
