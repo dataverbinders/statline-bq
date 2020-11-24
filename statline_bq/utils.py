@@ -445,32 +445,5 @@ def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs(?)
     return None
 
 
-def parse_config_toml(config_file: Union[Path, str]) -> NamedTuple:
-    """Parse out a toml file, and returns a named tuple contating the parsed config.toml file:
-
-    Args:
-        - config_file: a Path (or string) to the config.toml file
-    
-    Returns:
-        - config: a named tuple holding the following data from config.toml:
-            - config.GCP: a named tuple containing the GCP parameters (such as project and bucket)
-            - config.datasets: a tuple holding all dataset ids as strings
-    """
-    # Convert to Path if string
-    config_file = Path(config_file)
-    # Parse toml file as dict
-    with open(config_file) as conf:
-        config_dict = toml.load(conf)
-    # Convert datasets list to tuple
-    datasets = tuple(config_dict["datasets"]["datasets"])
-    # Convert GCP dict to named tuple
-    GCP = namedtuple("GCP", [key for key in config_dict["gcp"].keys()])
-    gcp = GCP(**config_dict["gcp"])
-    # Creat a namedtuple 'Config' to hold datasets tuple and GCP named tuple
-    Config = namedtuple("Config", ["datasets", "gcp"])
-    config = Config(datasets=datasets, gcp=gcp)
-    return config
-
-
 # if __name__ == "__main__":
 #     cbs_odata_to_gcs("83583NED")
