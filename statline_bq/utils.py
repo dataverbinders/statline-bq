@@ -1,5 +1,5 @@
 import subprocess
-from typing import Union, NamedTuple
+from typing import Union
 import os
 from pathlib import Path
 from glob import glob
@@ -10,8 +10,7 @@ from datetime import datetime
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
 from google.cloud import storage
-import toml
-from collections import namedtuple
+from statline_bq.config import Config
 
 
 def create_dir(path: Path) -> Path:
@@ -265,8 +264,10 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: dict
         - None  # TODO -> Return success/ fail code?
     """
     # Initialize Google Storage Client, get bucket, set blob
-    gcs = storage.Client(project=gcp.project)
-    gcs_bucket = gcs.get_bucket(gcp.bucket)
+    gcs = storage.Client(
+        project=gcp.dev.project_id
+    )  # TODO -> handle dev, test and prod appropriatley
+    gcs_bucket = gcs.get_bucket(gcp.dev.bucket)
     gcs_folder = (
         f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
     )
@@ -279,7 +280,7 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: dict
 
 
 def cbsodatav3_to_gcs(
-    id: str, third_party: bool = False, schema: str = "cbs", gcp: dict = None
+    id: str, third_party: bool = False, schema: str = "cbs", config: Config = None
 ):
     """Load CBS odata v3 into Google Cloud Storage as parquet files.
     For given dataset id, following tables are uploaded into schema (taking `cbs` as default and `83583NED` as example):
@@ -338,13 +339,13 @@ def cbsodatav3_to_gcs(
         # Add path of file to set
         files_parquet.add(pq_path)
 
-    upload_to_gcs(pq_dir, schema, odata_version, id, gcp)
+    upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
 
     return upload_to_gcs
 
 
 def cbsodatav4_to_gcs(
-    id: str, schema: str = "cbs", third_party: bool = False, gcp: dict = None
+    id: str, schema: str = "cbs", third_party: bool = False, config: Config = None
 ):  # TODO -> Add Paths config objects
     """Load CBS odata v4 into Google Cloud Storage as Parquet.
 
@@ -424,21 +425,21 @@ def cbsodatav4_to_gcs(
 
     # Upload to GCS
 
-    upload_to_gcs(pq_dir, schema, odata_version, id, gcp)
+    upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
 
     return files_parquet  # , data_set_description
 
 
-def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs(?)
-    id: str, schema: str = "cbs", third_party: bool = False, gcp: dict = None,
+def cbs_odata_to_gcs(
+    id: str, schema: str = "cbs", third_party: bool = False, config: Config = None,
 ):  # TODO -> Add Paths config object):
 
     print(f"Processing dataset {id}")
     # Check if v4
     if check_v4(id=id, third_party=third_party):
-        cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party, gcp=gcp)
+        cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party, config=config)
     else:
-        cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party, gcp=gcp)
+        cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party, config=config)
     print(
         f"Completed dataset {id}"
     )  # TODO - add response from google if possible (some success/failure flag)

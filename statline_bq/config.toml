@@ -20,16 +20,11 @@
     # credentials = ""  # currently not taken here. User needs to have authentication setup previous to using this library.
                         # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
     
-
 [paths]
 # Temporary paths to use for transformations are defined here.
 # All data paths are relative to "Path.home()/root"
 root = "Projects/statline-bq"
 temp = "temp"
 
-
 [datasets]
-datasets = [
-    "83583NED",
-    "83765NED"
-    ]
+ids = ["83583NED", "83765NED"]

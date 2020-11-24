@@ -1,6 +1,6 @@
 import click
 from statline_bq.utils import cbs_odata_to_gcs
-from statline_bq.config import get_config
+from statline_bq.config import get_config, get_datasets
 from pathlib import Path
 
 
@@ -23,13 +23,16 @@ def upload_datasets():
 
     config_path = Path("./config.toml")
     config = get_config(config_path)
+    datasets = get_datasets(config_path)
     click.echo("The following datasets will be downloaded from CBS and uploaded into:")
     click.echo("")
-    click.echo(f"Project: {config.gcp.project}")
-    click.echo(f"Bucket:  {config.gcp.bucket}")
+    click.echo(
+        f"Project: {config.gcp.dev.project_id}"
+    )  # TODO -> handle dev, test and prod appropriatley
+    click.echo(f"Bucket:  {config.gcp.dev.bucket}")
     click.echo("")
-    for i, dataset in enumerate(config.datasets):
+    for i, dataset in enumerate(datasets):
         click.echo(f"{i+1}. {dataset}")
     click.echo("")
-    for dataset in config.datasets:
-        cbs_odata_to_gcs(id=dataset, config=config)
+    for id in datasets:
+        cbs_odata_to_gcs(id=id, config=config)
