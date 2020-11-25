@@ -10,7 +10,8 @@ from datetime import datetime
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
 from google.cloud import storage
-from statline_bq.config import Config
+from google.cloud import bigquery
+from statline_bq.config import Config, Gcp
 
 
 def create_dir(path: Path) -> Path:
@@ -242,7 +243,7 @@ def convert_table_to_parquet(
     return pq_path
 
 
-def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: dict):
+def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: Gcp):
     """Uploads all files in a given directory to GCS, using the following structure:
     'project_name/bucket_name/schema/odata_version/id/YYYYMMDD/filename'
     
@@ -276,7 +277,7 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: dict
         gcs_blob = gcs_bucket.blob(gcs_folder + "/" + pfile)
         gcs_blob.upload_from_filename(dir / pfile)
 
-    return None  # TODO: Return suceess/failure??
+    return (gcs_folder,)  # TODO: Also return suceess/failure??
 
 
 def cbsodatav3_to_gcs(
@@ -343,9 +344,24 @@ def cbsodatav3_to_gcs(
         # Add path of file to set
         files_parquet.add(pq_path)
 
-    upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
+    gcs_folder = upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
 
-    return upload_to_gcs
+    # Keep only names
+    file_names = [
+        Path(path.name) for path in files_parquet
+    ]  # TODO: Does it matter we change a set to a list here?
+    # Create table in GBQ
+    gcs_to_gbq(
+        id=id,
+        schema=schema,
+        odata_version=odata_version,
+        third_party=third_party,
+        gcp=config.gcp,
+        gcs_folder=gcs_folder,
+        file_names=file_names,
+    )
+
+    return files_parquet
 
 
 def cbsodatav4_to_gcs(
@@ -430,10 +446,70 @@ def cbsodatav4_to_gcs(
         files_parquet.add(pq_path)
 
     # Upload to GCS
+    gcs_folder = upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
 
-    upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
+    # Keep only names
+    file_names = [
+        Path(path.name) for path in files_parquet
+    ]  # TODO: Does it matter we change a set to a list here?
+    # Create table in GBQ
+    gcs_to_gbq(
+        id=id,
+        schema=schema,
+        odata_version=odata_version,
+        third_party=third_party,
+        gcp=config.gcp,
+        gcs_folder=gcs_folder,
+        file_names=file_names,
+    )
 
     return files_parquet  # , data_set_description
+
+
+def gcs_to_gbq(
+    id: str,
+    schema: str = "cbs",
+    odata_version: str = None,
+    third_party: bool = False,
+    gcp: Gcp = None,
+    gcs_folder: str = None,
+    file_names: list = None,
+):
+    # Initialize client
+    client = bigquery.Client(project=gcp.dev.project_id)
+
+    # Configure the external data source
+    dataset_id = schema
+    dataset_ref = bigquery.DatasetReference(gcp.dev.project_id, dataset_id)
+
+    # Loop over all files related to this dataset id
+    for name in file_names:
+        # Configure the external data source per table id
+        table_id = str(name).split(".")[1]
+        table = bigquery.Table(dataset_ref.table(table_id))
+
+        external_config = bigquery.ExternalConfig("PARQUET")
+        external_config.source_uris = [
+            f"https://storage.cloud.google.com/{gcp.dev.bucket}/{gcs_folder}/{name}"  # TODO: Handle dev/test/prod?
+        ]
+        table.external_data_configuration = external_config
+
+        # Create a permanent table linked to the GCS file
+        table = client.create_table(table)  # BUG: error raised
+        """
+        Error message recieved:
+
+        RetryError: Deadline of 120.0s exceeded while calling functools.partial(functools.partial(<bound method
+        JSONConnection.api_request of <google.cloud.bigquery._http.Connection object at 0x11dc026d0>>, method='POST',
+        path='/projects/dataverbinders-dev/datasets/cbs/tables', data={'tableReference': {'projectId': 'dataverbinders-dev',
+        'datasetId': 'cbs', 'tableId': '83583NED_TypedDataSet'}, 'labels': {}, 'externalDataConfiguration': {'sourceFormat':
+        'PARQUET', 'sourceUris':
+        ["https://storage.cloud.google.com/dataverbinders-dev/('cbs/v3/83583NED/20201124',)/cbs.83583NED_TypedDataSet.parquet"]}}, timeout=None)), last exception: 500 POST https://bigquery.googleapis.com/bigquery/v2/projects/dataverbinders-dev/datasets/cbs/tables?prettyPrint=false: An internal error occurred and the request could not be completed.
+        """
+
+        # TODO: Remove break when working properly
+        break
+    return None  # TODO: Return success/failure/info about table?
 
 
 def cbs_odata_to_gcs(
