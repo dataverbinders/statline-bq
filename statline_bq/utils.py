@@ -1,5 +1,5 @@
 import subprocess
-from typing import Union, NamedTuple
+from typing import Union
 import os
 from pathlib import Path
 from glob import glob
@@ -10,8 +10,7 @@ from datetime import datetime
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
 from google.cloud import storage
-import toml
-from collections import namedtuple
+from statline_bq.config import Config
 
 
 def create_dir(path: Path) -> Path:
@@ -265,8 +264,10 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: dict
         - None  # TODO -> Return success/ fail code?
     """
     # Initialize Google Storage Client, get bucket, set blob
-    gcs = storage.Client(project=gcp.project)
-    gcs_bucket = gcs.get_bucket(gcp.bucket)
+    gcs = storage.Client(
+        project=gcp.dev.project_id
+    )  # TODO -> handle dev, test and prod appropriatley
+    gcs_bucket = gcs.get_bucket(gcp.dev.bucket)
     gcs_folder = (
         f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
     )
@@ -279,7 +280,7 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: dict
 
 
 def cbsodatav3_to_gcs(
-    id: str, third_party: bool = False, schema: str = "cbs", gcp: dict = None
+    id: str, third_party: bool = False, schema: str = "cbs", config: Config = None
 ):
     """Load CBS odata v3 into Google Cloud Storage as parquet files.
     For given dataset id, following tables are uploaded into schema (taking `cbs` as default and `83583NED` as example):
@@ -310,10 +311,14 @@ def cbsodatav3_to_gcs(
         for item in requests.get(base_url[third_party]).json()["value"]
     }
 
+    # Get paths from config object
+    root = Path.home() / Path(config.paths.root)
+    temp = root / Path(config.paths.temp)
+
     # Create placeholders for storage
     files_parquet = set()
-    pq_dir = Path(
-        f"./temp/{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+    pq_dir = temp / Path(
+        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
     create_dir(pq_dir)
 
@@ -338,13 +343,13 @@ def cbsodatav3_to_gcs(
         # Add path of file to set
         files_parquet.add(pq_path)
 
-    upload_to_gcs(pq_dir, schema, odata_version, id, gcp)
+    upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
 
     return upload_to_gcs
 
 
 def cbsodatav4_to_gcs(
-    id: str, schema: str = "cbs", third_party: bool = False, gcp: dict = None
+    id: str, schema: str = "cbs", third_party: bool = False, config: Config = None
 ):  # TODO -> Add Paths config objects
     """Load CBS odata v4 into Google Cloud Storage as Parquet.
 
@@ -388,12 +393,14 @@ def cbsodatav4_to_gcs(
     # # Get the description of the data set  # Currently not used - maybe move to a different place?
     # data_set_description = get_table_description_v4(urls["Properties"])
 
-    # gcs_bucket = gcs.bucket(GCP.bucket)
+    # Get paths from config object
+    root = Path.home() / Path(config.paths.root)
+    temp = root / Path(config.paths.temp)
 
     # Create placeholders for storage
     files_parquet = set()
-    pq_dir = Path(
-        f"./temp/{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+    pq_dir = temp / Path(
+        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
     create_dir(pq_dir)
 
@@ -424,52 +431,25 @@ def cbsodatav4_to_gcs(
 
     # Upload to GCS
 
-    upload_to_gcs(pq_dir, schema, odata_version, id, gcp)
+    upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
 
     return files_parquet  # , data_set_description
 
 
-def cbs_odata_to_gcs(  # TODO: Implement **args and **kwargs(?)
-    id: str, schema: str = "cbs", third_party: bool = False, gcp: dict = None,
+def cbs_odata_to_gcs(
+    id: str, schema: str = "cbs", third_party: bool = False, config: Config = None,
 ):  # TODO -> Add Paths config object):
 
     print(f"Processing dataset {id}")
     # Check if v4
     if check_v4(id=id, third_party=third_party):
-        cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party, gcp=gcp)
+        cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party, config=config)
     else:
-        cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party, gcp=gcp)
+        cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party, config=config)
     print(
         f"Completed dataset {id}"
     )  # TODO - add response from google if possible (some success/failure flag)
     return None
-
-
-def parse_config_toml(config_file: Union[Path, str]) -> NamedTuple:
-    """Parse out a toml file, and returns a named tuple contating the parsed config.toml file:
-
-    Args:
-        - config_file: a Path (or string) to the config.toml file
-    
-    Returns:
-        - config: a named tuple holding the following data from config.toml:
-            - config.GCP: a named tuple containing the GCP parameters (such as project and bucket)
-            - config.datasets: a tuple holding all dataset ids as strings
-    """
-    # Convert to Path if string
-    config_file = Path(config_file)
-    # Parse toml file as dict
-    with open(config_file) as conf:
-        config_dict = toml.load(conf)
-    # Convert datasets list to tuple
-    datasets = tuple(config_dict["datasets"]["datasets"])
-    # Convert GCP dict to named tuple
-    GCP = namedtuple("GCP", [key for key in config_dict["gcp"].keys()])
-    gcp = GCP(**config_dict["gcp"])
-    # Creat a namedtuple 'Config' to hold datasets tuple and GCP named tuple
-    Config = namedtuple("Config", ["datasets", "gcp"])
-    config = Config(datasets=datasets, gcp=gcp)
-    return config
 
 
 # if __name__ == "__main__":

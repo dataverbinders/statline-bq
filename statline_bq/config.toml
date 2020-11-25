@@ -1,13 +1,30 @@
 [gcp]
-project = "dataverbinders-dev"
-bucket = "dataverbinders-dev_test"
-# location = "EU"  # currently not used/implemented
-# credentials = "" # currently not taken here. User needs to have authentication setup previous to using this library.
-                   # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
+    [gcp.prod]
+    project_id = "dataverbinders"
+    bucket = "dataverbinders"
+    location = "EU"
+    # credentials = ""  # currently not taken here. User needs to have authentication setup previous to using this library.
+                        # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
 
+    [gcp.test]
+    project_id = "dataverbinders-test"
+    bucket = "dataverbinders-test"
+    location = "EU"
+    # credentials = ""  # currently not taken here. User needs to have authentication setup previous to using this library.
+                        # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
+
+    [gcp.dev]
+    project_id = "dataverbinders-dev"
+    bucket = "dataverbinders-dev"
+    location = "EU"
+    # credentials = ""  # currently not taken here. User needs to have authentication setup previous to using this library.
+                        # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
+    
+[paths]
+# Temporary paths to use for transformations are defined here.
+# All data paths are relative to "Path.home()/root"
+root = "Projects/statline-bq"
+temp = "temp"
 
 [datasets]
-datasets = [
-    "83583NED",
-    "83765NED"
-    ]
+ids = ["83583NED", "83765NED"]
