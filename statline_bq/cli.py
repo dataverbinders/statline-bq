@@ -22,8 +22,9 @@ def upload_datasets():
     """
 
     config_path = Path("./config.toml")
+    datasets_path = Path("./datasets.toml")
     config = get_config(config_path)
-    datasets = get_datasets(config_path)
+    datasets = get_datasets(datasets_path)
     click.echo("The following datasets will be downloaded from CBS and uploaded into:")
     click.echo("")
     click.echo(

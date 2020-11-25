@@ -67,11 +67,14 @@ def get_datasets(datasets_file: Union[Path, str]) -> tuple:
     config_file = Path(datasets_file)
     with open(config_file, "r") as f:
         doc = parse_toml(f.read())
-    return tuple(doc["datasets"]["ids"])
+    return tuple(
+        doc["datasets"]["ids"]
+    )  # TODO: make it more robust to changes in the file? i.e. if 'ids' was changed to something else?
 
 
 if __name__ == "__main__":
     config_path = Path("./statline_bq/config.toml")
+    datasets_path = Path("./statline_bq/datasets.toml")
     config = get_config(config_path)
-    datasets = get_datasets(config_path)
+    datasets = get_datasets(datasets_path)
     print(datasets)
