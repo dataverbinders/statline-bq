@@ -4,7 +4,7 @@ from serde import serialize, deserialize
 from serde.toml import from_toml
 from pathlib import Path
 from typing import Union
-from tomlkit import parse
+from tomlkit import parse as parse_toml
 
 
 @deserialize
@@ -39,7 +39,6 @@ class Paths:
 class Config:
     gcp: Gcp
     paths: Paths
-    datasets: List[str] = field(default_factory=list, metadata={"serde_skip": True})
 
 
 def get_config(config_file: Union[Path, str]):
@@ -60,14 +59,14 @@ def get_config(config_file: Union[Path, str]):
     return config
 
 
-def get_datasets(config_file: Union[Path, str]) -> tuple:
+def get_datasets(datasets_file: Union[Path, str]) -> tuple:
     """Checks whether the field 'Datasets' is filled within the config file,
     and returns a tuple of with the datasets' strings if exists, or
     None if it does not.
     """
-    config_file = Path(config_file)
+    config_file = Path(datasets_file)
     with open(config_file, "r") as f:
-        doc = parse(f.read())
+        doc = parse_toml(f.read())
     return tuple(doc["datasets"]["ids"])
 
 

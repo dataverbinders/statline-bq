@@ -25,6 +25,3 @@
 # All data paths are relative to "Path.home()/root"
 root = "Projects/statline-bq"
 temp = "temp"
-
-[datasets]
-ids = ["83583NED", "83765NED"]
