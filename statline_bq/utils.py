@@ -277,7 +277,7 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: Gcp)
         gcs_blob = gcs_bucket.blob(gcs_folder + "/" + pfile)
         gcs_blob.upload_from_filename(dir / pfile)
 
-    return (gcs_folder,)  # TODO: Also return suceess/failure??
+    return gcs_folder  # TODO: Also return suceess/failure??
 
 
 def cbsodatav3_to_gcs(
@@ -495,20 +495,7 @@ def gcs_to_gbq(
         table.external_data_configuration = external_config
 
         # Create a permanent table linked to the GCS file
-        table = client.create_table(table)  # BUG: error raised
-        """
-        Error message recieved:
-
-        RetryError: Deadline of 120.0s exceeded while calling functools.partial(functools.partial(<bound method
-        JSONConnection.api_request of <google.cloud.bigquery._http.Connection object at 0x11dc026d0>>, method='POST',
-        path='/projects/dataverbinders-dev/datasets/cbs/tables', data={'tableReference': {'projectId': 'dataverbinders-dev',
-        'datasetId': 'cbs', 'tableId': '83583NED_TypedDataSet'}, 'labels': {}, 'externalDataConfiguration': {'sourceFormat':
-        'PARQUET', 'sourceUris':
-        ["https://storage.cloud.google.com/dataverbinders-dev/('cbs/v3/83583NED/20201124',)/cbs.83583NED_TypedDataSet.parquet"]}}, timeout=None)), last exception: 500 POST https://bigquery.googleapis.com/bigquery/v2/projects/dataverbinders-dev/datasets/cbs/tables?prettyPrint=false: An internal error occurred and the request could not be completed.
-        """
-
-        # TODO: Remove break when working properly
-        break
+        table = client.create_table(table, exists_ok=True)  # BUG: error raised
     return None  # TODO: Return success/failure/info about table?
 
 
