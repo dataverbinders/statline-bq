@@ -78,8 +78,8 @@ def get_dataset_description_v4(url_table_properties: str) -> str:
     return r["Description"]
 
 
-def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=100000 ath the end - returns same data as first link
-    target_url: str,
+def get_odata_v4_curl(
+    target_url: str, config: Config
 ):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
     """Gets a table from a specific url for CBS Odata v4.
 
@@ -89,12 +89,15 @@ def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=
     Returns:
         - data (Dask bag): all data received from target url as json type, in a Dask bag
     """
-    # First call target url and get json formatted response as dict
-    temp_file = "odata.json"
-    # r = requests.get(target_url).json()
-    subprocess.run(["curl", "-fL", "-o", temp_file, target_url])
+    # set temp file path
+    temp_path = Path.home() / Path(config.paths.root) / Path(config.paths.temp)
+    temp_file = temp_path / "temp.json"
+    # use curl to write first request to file (limited to 10000)
+    subprocess.run(
+        f"curl -fL '{target_url}' > {temp_file}", shell=True
+    )  # Use '>' to overwrite if exists
     # Parse json file as dict
-    with open(temp_file) as f:
+    with open(temp_file, "r") as f:
         r = json.load(f)
     # Create Dask bag from dict
     bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
@@ -107,7 +110,7 @@ def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=
 
     # if more data exists continue to concat bag until complete
     while target_url:
-        subprocess.run(["curl", "-fL", "-o", temp_file, target_url])
+        subprocess.run(f"curl -fL '{target_url}' > {temp_file}", shell=True)
         # Parse json file as dict
         with open(temp_file) as f:
             r = json.load(f)
@@ -780,24 +783,20 @@ def cbs_odata_to_gbq(
     )  # TODO - add response from google if possible (some success/failure flag)
     return None
 
+    # %%
+    from config import get_config
+    from statline_bq.utils import get_odata_v4_curl
+    from pathlib import Path
 
-if __name__ == "__main__":
-    cbs_odata_to_gbq("83583NED")
+    config = get_config("./config.toml")
+    bag = get_odata_v4_curl("https://odata4.cbs.nl/CBS/83765NED/Observations", config)
 
-# from statline_bq.config import get_config
 
-# config = get_config("./config.toml")
+# %%
 
-# description = get_description_v3(
-#     "https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json"
-# )
-# print(description)
 
-# gcs_to_gbq(
-#     # id="835833NED",
-#     source="cbs",
-#     odata_version="v3",
-#     gcp=config.gcp,
-#     gcs_folder="cbs/v3/83583NED/20201126",
-#     file_names=["cbs.v3.83583NED_Bedrijfsgrootte.parquet"],
-# )
+# if __name__ == "__main__":
+#     from config import get_config
+
+#     get_config("./config.py")
+#     bag = get_odata_v4_curl("https://odata4.cbs.nl/CBS/83765NED/Observations")
