@@ -133,8 +133,8 @@ def get_odata_v3(
         bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
 
     # check if more data exists
-    if "@odata.nextLink" in r:
-        target_url = r["@odata.nextLink"]
+    if "odata.nextLink" in r:
+        target_url = r["odata.nextLink"]
     else:
         target_url = None
 
@@ -145,8 +145,8 @@ def get_odata_v3(
             temp_bag = db.from_sequence(r["value"])
             bag = db.concat([bag, temp_bag])
 
-        if "@odata.nextLink" in r:
-            target_url = r["@odata.nextLink"]
+        if "odata.nextLink" in r:
+            target_url = r["odata.nextLink"]
         else:
             target_url = None
 
