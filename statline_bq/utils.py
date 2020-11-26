@@ -790,14 +790,6 @@ def cbs_odata_to_gbq(
     )  # TODO - add response from google if possible (some success/failure flag)
     return None
 
-    # %%
-    from config import get_config
-    from statline_bq.utils import get_odata_v4_curl
-    from pathlib import Path
-
-    config = get_config("./config.toml")
-    bag = get_odata_v4_curl("https://odata4.cbs.nl/CBS/83765NED/Observations", config)
-
 
 # %%
 
@@ -806,4 +798,4 @@ def cbs_odata_to_gbq(
 #     from config import get_config
 
 #     get_config("./config.py")
-#     bag = get_odata_v4_curl("https://odata4.cbs.nl/CBS/83765NED/Observations")
+#     bag = get_odata_curl("https://odata4.cbs.nl/CBS/83765NED/Observations")
