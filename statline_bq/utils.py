@@ -151,7 +151,10 @@ def get_odata_v3(
         else:
             target_url = None
 
-    return bag
+    if "bag" in locals():
+        return bag
+    else:
+        return None
 
 
 def get_odata_v4(
@@ -355,11 +358,14 @@ def cbsodatav3_to_gbq(
         # Get data from source
         table = get_odata_v3(url)
 
-        # Convert to parquet
-        pq_path = convert_table_to_parquet(table, table_name, pq_dir)
+        # Check if get_odata_v3 returned None (when link in CBS returns empty table, i.e. CategoryGroups in "84799NED")
+        if table is not None:
 
-        # Add path of file to set
-        files_parquet.add(pq_path)
+            # Convert to parquet
+            pq_path = convert_table_to_parquet(table, table_name, pq_dir)
+
+            # Add path of file to set
+            files_parquet.add(pq_path)
 
     gcs_folder = upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
 
