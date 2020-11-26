@@ -78,8 +78,8 @@ def get_dataset_description_v4(url_table_properties: str) -> str:
     return r["Description"]
 
 
-def get_odata_v4_curl(
-    target_url: str, config: Config
+def get_odata_curl(
+    target_url: str, odata_version: str, config: Config
 ):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
     """Gets a table from a specific url for CBS Odata v4.
 
@@ -89,6 +89,13 @@ def get_odata_v4_curl(
     Returns:
         - data (Dask bag): all data received from target url as json type, in a Dask bag
     """
+    # set nextLink string according to version
+    if odata_version.lower() == "v4":
+        next_link = "@odata.nextLink"
+    elif odata_version.lower() == "v3":
+        next_link = "odata.nextLink"
+    else:
+        print("OData Version must be either 'v3' or 'v4' ")
     # set temp file path
     temp_path = Path.home() / Path(config.paths.root) / Path(config.paths.temp)
     temp_file = temp_path / "temp.json"
@@ -103,8 +110,8 @@ def get_odata_v4_curl(
     bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
 
     # check if more data exists
-    if "@odata.nextLink" in r:
-        target_url = r["@odata.nextLink"]
+    if next_link in r:
+        target_url = r[next_link]
     else:
         target_url = None
 
@@ -117,8 +124,8 @@ def get_odata_v4_curl(
         temp_bag = db.from_sequence(r["value"])
         bag = db.concat([bag, temp_bag])
 
-        if "@odata.nextLink" in r:
-            target_url = r["@odata.nextLink"]
+        if next_link in r:
+            target_url = r[next_link]
         else:
             target_url = None
 
