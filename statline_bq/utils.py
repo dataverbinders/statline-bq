@@ -280,25 +280,44 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: Gcp)
     return gcs_folder  # TODO: Also return suceess/failure??
 
 
-def cbsodatav3_to_gcs(
+def cbsodatav3_to_gbq(
     id: str, third_party: bool = False, schema: str = "cbs", config: Config = None
 ):
-    """Load CBS odata v3 into Google Cloud Storage as parquet files.
+    """Load CBS odata v3 into Google Cloud Storage as parquet files. Then, it creates a new permanenet
+    table in Google Big Query, linked to the dataset.
+
+    In GCS, the following "folders" and filenames' structure is used:
+
+        - [project/]{bucket_name}/{schema}/{version}/{dataset_id}/{date_of_upload}/{schema}.{version}.{dataset_id}_{table_name}.parquet
+
+        for example:
+
+        - [dataverbinders/]dataverbinders/cbs/v3/84286NED/20201125/cbs.v3.84286NED_TypedDataSet.parquet
+    
+    In GBQ, the following structure and table names are used:
+
+        - [project/]{schema}_{version}/{dataset_id}_{table_name}
+
+        for example:
+
+        - [dataverbinders/]dataverbinders/cbs_v3/84286NED_TypedDataSet
+
     For given dataset id, following tables are uploaded into schema (taking `cbs` as default and `83583NED` as example):
-    - cbs.83583NED_DataProperties: description of topics and dimensions contained in table
-    - cbs.83583NED_DimensionName: separate dimension tables
-    - cbs.83583NED_TypedDataSet: the TypedDataset
-    - cbs.83583NED_CategoryGroups: grouping of dimensions
+    - cbs.v3.83583NED_DataProperties: description of topics and dimensions contained in table
+    - cbs.v3.83583NED_DimensionName: separate dimension tables
+    - cbs.v3.83583NED_TypedDataSet: the TypedDataset
+    - cbs.v3.83583NED_CategoryGroups: grouping of dimensions
     See Handleiding CBS Open Data Services (v3)[^odatav3] for details.
 
     Args:
         - id (str): table ID like `83583NED`
         - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
         - schema (str): schema to load data into
-        - credentials: GCP credentials
-        - GCP: config object
+        - config: config object
+
     Return:
         - List[google.cloud.bigquery.job.LoadJob]
+
     [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-opendata-services.pdf
     """
     odata_version = "v3"
@@ -331,9 +350,7 @@ def cbsodatav3_to_gcs(
         url = "?".join((url, "$format=json"))
 
         # Create table name to be used in GCS
-        table_name = (
-            f"{schema}.{id}_{key}"  # Maybe remove schema? is stated via folder.
-        )
+        table_name = f"{schema}.{odata_version}.{id}_{key}"
 
         # Get data from source
         table = get_odata_v3(url)
@@ -364,23 +381,40 @@ def cbsodatav3_to_gcs(
     return files_parquet
 
 
-def cbsodatav4_to_gcs(
+def cbsodatav4_to_gbq(
     id: str, schema: str = "cbs", third_party: bool = False, config: Config = None
 ):  # TODO -> Add Paths config objects
-    """Load CBS odata v4 into Google Cloud Storage as Parquet.
+    """Load CBS odata v4 into Google Cloud Storage as parquet files. Then, it creates a new permanenet
+    table in Google Big Query, linked to the dataset.
 
-    For a given dataset id, the following tables are ALWAYS uploaded into GCS
-    (taking `cbs` as default and `83583NED` as example):
-        - ``cbs.83583NED_Observations``: The actual values of the dataset
-        - ``cbs.83583NED_MeasureCodes``: Describing the codes that appear in the Measure column of the Observations table. 
-        - ``cbs.83583NED_Dimensions``: Information over the dimensions
+    In GCS, the following "folders" and filenames' structure is used:
+
+        - [project/]{bucket_name}/{schema}/{version}/{dataset_id}/{date_of_upload}/{schema}.{version}.{dataset_id}_{table_name}.parquet
+
+        for example:
+
+        - [dataverbinders/]dataverbinders/cbs/v4/83765NED/20201125/cbs.v4.83765NED_Observationst.parquet
+    
+    In GBQ, the following structure and table names are used:
+
+        - [project/]{schema}_{version}/{dataset_id}_{table_name}
+
+        for example:
+
+        - [dataverbinders/]dataverbinders/cbs_v4/83765NED_Observations
+
+    For a given dataset id, the following tables are ALWAYS uploaded into GCS and linked in GBQ
+    (taking `cbs` as default and `83765NED` as example):
+        - ``cbs.v4.83765NED_Observations``: The actual values of the dataset
+        - ``cbs.v4.83765NED_MeasureCodes``: Describing the codes that appear in the Measure column of the Observations table. 
+        - ``cbs.v4.83765NED_Dimensions``: Information over the dimensions
 
     Additionally, this function will upload all other tables in the dataset, except `Properties`.
         These may include:
-            - ``cbs.83583NED_MeasureGroups``: Describing the hierarchy of the Measures
+            - ``cbs.v4.83765NED_MeasureGroups``: Describing the hierarchy of the Measures
         And, for each Dimensionlisted in the `Dimensions` table (i.e. `{Dimension_1}`)
-            - ``cbs.83583NED_{Dimension_1}Codes
-            - ``cbs.83583NED_{Dimension_1}Groups [IF IT EXISTS]
+            - ``cbs.v4.83765NED_{Dimension_1}Codes
+            - ``cbs.v4.83765NED_{Dimension_1}Groups [IF IT EXISTS]
 
     See `Informatie voor ontwikelaars <https://dataportal.cbs.nl/info/ontwikkelaars>` for details.
 
@@ -432,9 +466,7 @@ def cbsodatav4_to_gcs(
     ]:
 
         # Create table name to be used in GCS
-        table_name = (
-            f"{schema}.{id}_{key}"  # Maybe remove schema? is stated via folder.
-        )
+        table_name = f"{schema}.{odata_version}.{id}_{key}"
 
         # Get data from source
         table = get_odata_v4(url)
@@ -479,13 +511,13 @@ def gcs_to_gbq(
     client = bigquery.Client(project=gcp.dev.project_id)
 
     # Configure the external data source
-    dataset_id = schema
+    dataset_id = f"{schema}_{odata_version}"
     dataset_ref = bigquery.DatasetReference(gcp.dev.project_id, dataset_id)
 
     # Loop over all files related to this dataset id
     for name in file_names:
         # Configure the external data source per table id
-        table_id = str(name).split(".")[1]
+        table_id = str(name).split(".")[2]
         table = bigquery.Table(dataset_ref.table(table_id))
 
         external_config = bigquery.ExternalConfig("PARQUET")
@@ -499,21 +531,25 @@ def gcs_to_gbq(
     return None  # TODO: Return success/failure/info about table?
 
 
-def cbs_odata_to_gcs(
+def cbs_odata_to_gbq(
     id: str, schema: str = "cbs", third_party: bool = False, config: Config = None,
 ):  # TODO -> Add Paths config object):
 
     print(f"Processing dataset {id}")
     # Check if v4
     if check_v4(id=id, third_party=third_party):
-        cbsodatav4_to_gcs(id=id, schema=schema, third_party=third_party, config=config)
+        cbsodatav4_to_gbq(id=id, schema=schema, third_party=third_party, config=config)
     else:
-        cbsodatav3_to_gcs(id=id, schema=schema, third_party=third_party, config=config)
+        cbsodatav3_to_gbq(id=id, schema=schema, third_party=third_party, config=config)
     print(
         f"Completed dataset {id}"
     )  # TODO - add response from google if possible (some success/failure flag)
     return None
 
 
-# if __name__ == "__main__":
-#     cbs_odata_to_gcs("83583NED")
+if __name__ == "__main__":
+    #     cbs_odata_to_gcs("83583NED")
+    from statline_bq.config import get_config
+
+    config = get_config("./statline_bq/config.toml")
+    cbs_odata_to_gbq("84799NED", config=config)
