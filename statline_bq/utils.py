@@ -375,7 +375,7 @@ def cbsodatav3_to_gbq(
     ]  # TODO: Does it matter we change a set to a list here?
     # Create table in GBQ
     gcs_to_gbq(
-        id=id,
+        # id=id,
         schema=schema,
         odata_version=odata_version,
         third_party=third_party,
@@ -492,7 +492,7 @@ def cbsodatav4_to_gbq(
     ]  # TODO: Does it matter we change a set to a list here?
     # Create table in GBQ
     gcs_to_gbq(
-        id=id,
+        # id=id,
         schema=schema,
         odata_version=odata_version,
         third_party=third_party,
@@ -505,7 +505,7 @@ def cbsodatav4_to_gbq(
 
 
 def gcs_to_gbq(
-    id: str,
+    # id: str,  # NOT USED!!!
     schema: str = "cbs",
     odata_version: str = None,
     third_party: bool = False,
@@ -531,6 +531,7 @@ def gcs_to_gbq(
             f"https://storage.cloud.google.com/{gcp.dev.bucket}/{gcs_folder}/{name}"  # TODO: Handle dev/test/prod?
         ]
         table.external_data_configuration = external_config
+        table.description = description
 
         # Create a permanent table linked to the GCS file
         table = client.create_table(table, exists_ok=True)  # BUG: error raised
@@ -558,4 +559,11 @@ if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    cbs_odata_to_gbq("84799NED", config=config)
+    # gcs_to_gbq(
+    #     # id="835833NED",
+    #     schema="cbs",
+    #     odata_version="v3",
+    #     gcp=config.gcp,
+    #     gcs_folder="cbs/v3/83583NED/20201126",
+    #     file_names=["cbs.v3.83583NED_Bedrijfsgrootte.parquet"],
+    # )
