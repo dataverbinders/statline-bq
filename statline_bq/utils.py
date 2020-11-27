@@ -170,6 +170,7 @@ def get_odata_v4(
     Returns:
         - data (Dask bag): all data received from target url as json type, in a Dask bag
     """
+    print(fetching)
     # First call target url and get json formatted response as dict
     r = requests.get(target_url).json()
     # Create Dask bag from dict
@@ -376,7 +377,7 @@ def cbsodatav3_to_gbq(
     ]  # TODO: Does it matter we change a set to a list here?
     # Create table in GBQ
     gcs_to_gbq(
-        # id=id,
+        id=id,
         schema=schema,
         odata_version=odata_version,
         third_party=third_party,
@@ -493,7 +494,7 @@ def cbsodatav4_to_gbq(
     ]  # TODO: Does it matter we change a set to a list here?
     # Create table in GBQ
     gcs_to_gbq(
-        # id=id,
+        id=id,
         schema=schema,
         odata_version=odata_version,
         third_party=third_party,
@@ -547,7 +548,7 @@ def create_bq_dataset(id: str, description: str = None, gcp: Gcp = None) -> str:
 
 
 def gcs_to_gbq(
-    # id: str,  # NOT USED!!!
+    id: str,
     schema: str = "cbs",
     odata_version: str = None,
     third_party: bool = False,
@@ -555,11 +556,19 @@ def gcs_to_gbq(
     gcs_folder: str = None,
     file_names: list = None,
 ):
+
+    # Create a dataset in BQ
+    dataset_id, existing = create_bq_dataset(id=id, gcp=gcp)  # Add description TODO
+    # if not existing:
+    # description = get_description() # Read description form file in GCS?
+    # else:
+    # Handle existing dataset - delete and recreate? Repopulate? TODO
+
     # Initialize client
     client = bigquery.Client(project=gcp.dev.project_id)
 
     # Configure the external data source
-    dataset_id = f"{schema}_{odata_version}"
+    # dataset_id = f"{schema}_{odata_version}_{id}"
     dataset_ref = bigquery.DatasetReference(gcp.dev.project_id, dataset_id)
 
     # Loop over all files related to this dataset id
@@ -573,7 +582,7 @@ def gcs_to_gbq(
             f"https://storage.cloud.google.com/{gcp.dev.bucket}/{gcs_folder}/{name}"  # TODO: Handle dev/test/prod?
         ]
         table.external_data_configuration = external_config
-        table.description = description
+        # table.description = description
 
         # Create a permanent table linked to the GCS file
         table = client.create_table(table, exists_ok=True)  # BUG: error raised
