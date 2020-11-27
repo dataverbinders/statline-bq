@@ -12,6 +12,7 @@ import pyarrow.parquet as pq
 from google.cloud import storage
 from google.cloud import bigquery
 from statline_bq.config import Config, Gcp
+from google.api_core import exceptions
 
 
 def create_dir(path: Path) -> Path:
@@ -502,6 +503,47 @@ def cbsodatav4_to_gbq(
     )
 
     return files_parquet  # , data_set_description
+
+
+def create_bq_dataset(id: str, description: str = None, gcp: Gcp = None) -> str:
+    """Creates a dataset in Google Big Query. If dataset exists already exists,
+    does nothing.
+
+    Args:
+        - id (str): string to be used as the dataset id
+        - description (str): description for the dataset
+
+    Returns:
+        - string with the dataset id
+        - existing flag indicating whether the dataset already existed when trying to create it
+    """
+    # Construct a BigQuery client object.
+    client = bigquery.Client(project=gcp.dev.project_id)
+
+    # Set dataset_id to the ID of the dataset to create.
+    dataset_id = f"{client.project}.{id}"
+
+    # Construct a full Dataset object to send to the API.
+    dataset = bigquery.Dataset(dataset_id)
+
+    # Specify the geographic location where the dataset should reside.
+    dataset.location = gcp.dev.location
+
+    # Add description if provided
+    dataset.description = description
+
+    # Send the dataset to the API for creation, with an explicit timeout.
+    # Raises google.api_core.exceptions.Conflict if the Dataset already
+    # exists within the project.
+    try:
+        dataset = client.create_dataset(dataset, timeout=30)  # Make an API request.
+        print(f"Created dataset {client.project}.{dataset.dataset_id}")
+        existing = False
+    except exceptions.Conflict:
+        print(f"Dataset {client.project}.{dataset.dataset_id} already exists")
+        existing = True
+    finally:
+        return dataset.dataset_id, existing
 
 
 def gcs_to_gbq(
