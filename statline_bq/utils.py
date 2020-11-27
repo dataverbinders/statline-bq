@@ -170,7 +170,7 @@ def get_odata_v4(
     Returns:
         - data (Dask bag): all data received from target url as json type, in a Dask bag
     """
-    print(fetching)
+    print(f"Fetching from {target_url}")
     # First call target url and get json formatted response as dict
     r = requests.get(target_url).json()
     # Create Dask bag from dict
@@ -448,8 +448,6 @@ def cbsodatav4_to_gbq(
         item["name"]: base_url[third_party] + "/" + item["url"]
         for item in get_odata_v4(base_url[third_party])
     }
-    # # Get the description of the data set  # Currently not used - maybe move to a different place?
-    # data_set_description = get_table_description_v4(urls["Properties"])
 
     # Get paths from config object
     root = Path.home() / Path(config.paths.root)
@@ -484,6 +482,13 @@ def cbsodatav4_to_gbq(
 
         # Add path of file to set
         files_parquet.add(pq_path)
+
+    # Get the description of the data set  # Currently not used - maybe move to a different place?
+    description_text = get_table_description_v4(urls["Properties"])
+
+    description_file = pq_dir / Path(f"{schema}.{odata_version}.{id}_Description.txt")
+    with open(description_file, "w+") as f:
+        f.write(description_text)
 
     # Upload to GCS
     gcs_folder = upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
@@ -618,3 +623,10 @@ if __name__ == "__main__":
     #     gcs_folder="cbs/v3/83583NED/20201126",
     #     file_names=["cbs.v3.83583NED_Bedrijfsgrootte.parquet"],
     # )
+
+# %%
+from statline_bq.utils import get_odata_v4
+
+base_url = "https://odata4.cbs.nl/CBS/83765NED"
+
+# %%
