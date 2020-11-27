@@ -462,8 +462,14 @@ def cbsodatav4_to_gbq(
 
     ## Download datasets from CBS and converting to Parquet
 
-    # Iterate over all tables related to dataset
-    for key, url in [(k, v) for k, v in urls.items()]:
+    # Iterate over all tables related to dataset, excepet Properties (TODO -> double check that it is redundandt)
+    for key, url in [
+        (k, v)
+        for k, v in urls.items()
+        if k not in ("Properties")
+        # TEMP - FOR QUICKER TESTS OMIT OBSERVATIONS FROM PROCESSING
+        # (k, v) for k, v in urls.items() if k not in ("Observations", "Properties")
+    ]:
 
         # Create table name to be used in GCS
         table_name = f"{schema}.{odata_version}.{id}_{key}"
