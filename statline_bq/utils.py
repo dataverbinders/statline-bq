@@ -718,21 +718,22 @@ def cbs_odata_to_gbq(
 
 
 if __name__ == "__main__":
-    #     cbs_odata_to_gcs("83583NED")
+    cbs_odata_to_gcs("83583NED")
 
-    # from statline_bq.config import get_config
-    # config = get_config("./config.toml")
+# from statline_bq.config import get_config
+# config = get_config("./config.toml")
 
-    # description = get_description_v3(
-    #     "https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json"
-    # )
-    # print(description)
+# description = get_description_v3(
+#     "https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json"
+# )
+# print(description)
 
-    # gcs_to_gbq(
-    #     # id="835833NED",
-    #     schema="cbs",
-    #     odata_version="v3",
-    #     gcp=config.gcp,
-    #     gcs_folder="cbs/v3/83583NED/20201126",
-    #     file_names=["cbs.v3.83583NED_Bedrijfsgrootte.parquet"],
-    # )
+# gcs_to_gbq(
+#     # id="835833NED",
+#     schema="cbs",
+#     odata_version="v3",
+#     gcp=config.gcp,
+#     gcs_folder="cbs/v3/83583NED/20201126",
+#     file_names=["cbs.v3.83583NED_Bedrijfsgrootte.parquet"],
+# )
+
