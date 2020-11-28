@@ -279,9 +279,9 @@ def convert_table_to_parquet(
     return pq_path
 
 
-def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: Gcp):
+def upload_to_gcs(dir: Path, source: str, odata_version: str, id: str, gcp: Gcp):
     """Uploads all files in a given directory to GCS, using the following structure:
-    'project_name/bucket_name/schema/odata_version/id/YYYYMMDD/filename'
+    'project_name/bucket_name/source/odata_version/id/YYYYMMDD/filename'
     
     Meant to be used for uploading all tables for a certain dataset retrieved from CBS API,
     and hence to upload (for example) into:
@@ -293,7 +293,7 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: Gcp)
     
     Args:
         - dir: A Path object to a directory containing files to be uploaded
-        - schema: schema to load data into
+        - source: source to load data into
         - odata_version: 'v4' or 'v3', stating the version of the original odata retrieved
         - id (str): table ID like `83583NED`
 
@@ -306,7 +306,7 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: Gcp)
     )  # TODO -> handle dev, test and prod appropriatley
     gcs_bucket = gcs.get_bucket(gcp.dev.bucket)
     gcs_folder = (
-        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
+        f"{source}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
     )
     # Upload file
     for pfile in os.listdir(dir):
@@ -317,14 +317,14 @@ def upload_to_gcs(dir: Path, schema: str, odata_version: str, id: str, gcp: Gcp)
 
 
 def cbsodatav3_to_gbq(
-    id: str, third_party: bool = False, schema: str = "cbs", config: Config = None
+    id: str, third_party: bool = False, source: str = "cbs", config: Config = None
 ):
     """Load CBS odata v3 into Google Cloud Storage as parquet files. Then, it creates a new permanenet
     table in Google Big Query, linked to the dataset.
 
     In GCS, the following "folders" and filenames' structure is used:
 
-        - [project/]{bucket_name}/{schema}/{version}/{dataset_id}/{date_of_upload}/{schema}.{version}.{dataset_id}_{table_name}.parquet
+        - [project/]{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet
 
         for example:
 
@@ -332,13 +332,13 @@ def cbsodatav3_to_gbq(
     
     In GBQ, the following structure and table names are used:
 
-        - [project/]{schema}_{version}/{dataset_id}_{table_name}
+        - [project/]{source}_{version}/{dataset_id}_{table_name}
 
         for example:
 
         - [dataverbinders/]dataverbinders/cbs_v3/84286NED_TypedDataSet
 
-    For given dataset id, following tables are uploaded into schema (taking `cbs` as default and `83583NED` as example):
+    For given dataset id, following tables are uploaded into source (taking `cbs` as default and `83583NED` as example):
     - cbs.v3.83583NED_DataProperties: description of topics and dimensions contained in table
     - cbs.v3.83583NED_DimensionName: separate dimension tables
     - cbs.v3.83583NED_TypedDataSet: the TypedDataset
@@ -348,7 +348,7 @@ def cbsodatav3_to_gbq(
     Args:
         - id (str): table ID like `83583NED`
         - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
-        - schema (str): schema to load data into
+        - source (str): source to load data into
         - config: config object
 
     Return:
@@ -374,7 +374,7 @@ def cbsodatav3_to_gbq(
     # Create placeholders for storage
     files_parquet = set()
     pq_dir = temp / Path(
-        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+        f"{source}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
     create_dir(pq_dir)
 
@@ -386,7 +386,7 @@ def cbsodatav3_to_gbq(
         url = "?".join((url, "$format=json"))
 
         # Create table name to be used in GCS
-        table_name = f"{schema}.{odata_version}.{id}_{key}"
+        table_name = f"{source}.{odata_version}.{id}_{key}"
 
         # Get data from source
         table = get_odata_v3(url)
@@ -403,12 +403,12 @@ def cbsodatav3_to_gbq(
     # Get the description of the data set
     description_text = get_dataset_description_v3(urls["TableInfos"])
 
-    description_file = pq_dir / Path(f"{schema}.{odata_version}.{id}_Description.txt")
+    description_file = pq_dir / Path(f"{source}.{odata_version}.{id}_Description.txt")
     with open(description_file, "w+") as f:
         f.write(description_text)
 
     # Upload to GCS
-    gcs_folder = upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
+    gcs_folder = upload_to_gcs(pq_dir, source, odata_version, id, config.gcp)
 
     # Keep only names
     file_names = [
@@ -417,7 +417,7 @@ def cbsodatav3_to_gbq(
     # Create table in GBQ
     gcs_to_gbq(
         id=id,
-        schema=schema,
+        source=source,
         odata_version=odata_version,
         third_party=third_party,
         gcp=config.gcp,
@@ -429,14 +429,14 @@ def cbsodatav3_to_gbq(
 
 
 def cbsodatav4_to_gbq(
-    id: str, schema: str = "cbs", third_party: bool = False, config: Config = None
+    id: str, source: str = "cbs", third_party: bool = False, config: Config = None
 ):  # TODO -> Add Paths config objects
     """Load CBS odata v4 into Google Cloud Storage as parquet files. Then, it creates a new permanenet
     table in Google Big Query, linked to the dataset.
 
     In GCS, the following "folders" and filenames' structure is used:
 
-        - [project/]{bucket_name}/{schema}/{version}/{dataset_id}/{date_of_upload}/{schema}.{version}.{dataset_id}_{table_name}.parquet
+        - [project/]{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet
 
         for example:
 
@@ -444,7 +444,7 @@ def cbsodatav4_to_gbq(
     
     In GBQ, the following structure and table names are used:
 
-        - [project/]{schema}_{version}/{dataset_id}_{table_name}
+        - [project/]{source}_{version}/{dataset_id}_{table_name}
 
         for example:
 
@@ -468,7 +468,7 @@ def cbsodatav4_to_gbq(
     Args:
         - id (str): table ID like `83583NED`
         - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
-        - schema (str): schema to load data into
+        - source (str): source to load data into
         - credentials: GCP credentials
         - GCP: config object
         - paths: config object for output directory
@@ -495,7 +495,7 @@ def cbsodatav4_to_gbq(
     # Create placeholders for storage
     files_parquet = set()
     pq_dir = temp / Path(
-        f"{schema}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+        f"{source}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
     create_dir(pq_dir)
 
@@ -511,7 +511,7 @@ def cbsodatav4_to_gbq(
     ]:
 
         # Create table name to be used in GCS
-        table_name = f"{schema}.{odata_version}.{id}_{key}"
+        table_name = f"{source}.{odata_version}.{id}_{key}"
 
         # Get data from source
         table = get_odata_v4(url)
@@ -525,12 +525,12 @@ def cbsodatav4_to_gbq(
     # Get the description of the data set
     description_text = get_dataset_description_v4(urls["Properties"])
 
-    description_file = pq_dir / Path(f"{schema}.{odata_version}.{id}_Description.txt")
+    description_file = pq_dir / Path(f"{source}.{odata_version}.{id}_Description.txt")
     with open(description_file, "w+") as f:
         f.write(description_text)
 
     # Upload to GCS
-    gcs_folder = upload_to_gcs(pq_dir, schema, odata_version, id, config.gcp)
+    gcs_folder = upload_to_gcs(pq_dir, source, odata_version, id, config.gcp)
 
     # Keep only names
     file_names = [
@@ -539,7 +539,7 @@ def cbsodatav4_to_gbq(
     # Create table in GBQ
     gcs_to_gbq(
         id=id,
-        schema=schema,
+        source=source,
         odata_version=odata_version,
         third_party=third_party,
         gcp=config.gcp,
@@ -594,7 +594,7 @@ def create_bq_dataset(id: str, description: str = None, gcp: Gcp = None) -> str:
 
 def get_description_from_gcs(
     id: str,
-    schema: str = "cbs",
+    source: str = "cbs",
     odata_version: str = None,
     gcp: Gcp = None,
     gcs_folder: str = None,
@@ -602,13 +602,13 @@ def get_description_from_gcs(
     """Gets previsouly uploaded dataset description from GCS. The description
     should exist in the following file, under the following structure:
     
-        - {project}/{bucket}/{schema}/{odata_version}/{id}/{YYYYMMDD}/{schema}.{odata_version}.{id}_Description
+        - {project}/{bucket}/{source}/{odata_version}/{id}/{YYYYMMDD}/{source}.{odata_version}.{id}_Description
         For example:
         - dataverbinders-dev/cbs/v4/83765NED/20201127/cbs.v4.83765NED_Description.txt
     
     Args:
         - id (str): table ID like `83583NED`
-        - schema (str): schema to load data into
+        - source (str): source to load data into
         - odata_version (str): 'v3' or 'v4' indicating the version
         - gcp: config object
         - gcs_folder (str): "folder" path in gcs        
@@ -616,14 +616,14 @@ def get_description_from_gcs(
     client = storage.Client(project=gcp.dev.project_id)
     bucket = client.get_bucket(gcp.dev.bucket)
     blob = bucket.get_blob(
-        f"{gcs_folder}/{schema}.{odata_version}.{id}_Description.txt"
+        f"{gcs_folder}/{source}.{odata_version}.{id}_Description.txt"
     )
     return str(blob.download_as_string().decode("utf-8"))
 
 
 def gcs_to_gbq(
     id: str,
-    schema: str = "cbs",
+    source: str = "cbs",
     odata_version: str = None,
     third_party: bool = False,
     gcp: Gcp = None,
@@ -636,7 +636,7 @@ def gcs_to_gbq(
 
     Args:
         - id (str): table ID like `83583NED`
-        - schema (str): schema to load data into
+        - source (str): source to load data into
         - odata_version (str): 'v3' or 'v4' indicating the version
         - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
         - gcp (Gcp): config object
@@ -664,7 +664,7 @@ def gcs_to_gbq(
     # Get description text from txt file
     description = get_description_from_gcs(
         id=id,
-        schema=schema,
+        source=source,
         odata_version=odata_version,
         gcp=gcp,
         gcs_folder=gcs_folder,
@@ -680,7 +680,7 @@ def gcs_to_gbq(
     client = bigquery.Client(project=gcp.dev.project_id)
 
     # Configure the external data source
-    # dataset_id = f"{schema}_{odata_version}_{id}"
+    # dataset_id = f"{source}_{odata_version}_{id}"
     dataset_ref = bigquery.DatasetReference(gcp.dev.project_id, dataset_id)
 
     # Loop over all files related to this dataset id
@@ -702,15 +702,15 @@ def gcs_to_gbq(
 
 
 def cbs_odata_to_gbq(
-    id: str, schema: str = "cbs", third_party: bool = False, config: Config = None,
+    id: str, source: str = "cbs", third_party: bool = False, config: Config = None,
 ):  # TODO -> Add Paths config object):
 
     print(f"Processing dataset {id}")
     # Check if v4
     if check_v4(id=id, third_party=third_party):
-        cbsodatav4_to_gbq(id=id, schema=schema, third_party=third_party, config=config)
+        cbsodatav4_to_gbq(id=id, source=source, third_party=third_party, config=config)
     else:
-        cbsodatav3_to_gbq(id=id, schema=schema, third_party=third_party, config=config)
+        cbsodatav3_to_gbq(id=id, source=source, third_party=third_party, config=config)
     print(
         f"Completed dataset {id}"
     )  # TODO - add response from google if possible (some success/failure flag)
@@ -718,7 +718,7 @@ def cbs_odata_to_gbq(
 
 
 if __name__ == "__main__":
-    cbs_odata_to_gcs("83583NED")
+    cbs_odata_to_gbq("83583NED")
 
 # from statline_bq.config import get_config
 # config = get_config("./config.toml")
@@ -730,7 +730,7 @@ if __name__ == "__main__":
 
 # gcs_to_gbq(
 #     # id="835833NED",
-#     schema="cbs",
+#     source="cbs",
 #     odata_version="v3",
 #     gcp=config.gcp,
 #     gcs_folder="cbs/v3/83583NED/20201126",
