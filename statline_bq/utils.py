@@ -584,12 +584,50 @@ def create_bq_dataset(id: str, description: str = None, gcp: Gcp = None) -> str:
     try:
         dataset = client.create_dataset(dataset, timeout=30)  # Make an API request.
         print(f"Created dataset {client.project}.{dataset.dataset_id}")
-        existing = False
     except exceptions.Conflict:
         print(f"Dataset {client.project}.{dataset.dataset_id} already exists")
-        existing = True
     finally:
-        return dataset.dataset_id, existing
+        return dataset.dataset_id
+
+
+def check_bq_dataset(id: str, gcp: Gcp) -> bool:
+    """Check if dataset exists in BQ.
+
+    Args:
+        - id (str): the dataset id, i.e. '83583NED'
+        - gcp (Gcp): a config object
+
+    Returns:
+        - True if exists, False if does not exists
+    """
+    client = bigquery.Client(project=gcp.dev.project_id)
+
+    try:
+        client.get_dataset(id)  # Make an API request.
+        # print(f"Dataset {id} already exists")
+        return True
+    except exceptions.NotFound:
+        # print(f"Dataset {id} is not found"
+        return False
+
+
+def delete_bq_dataset(id: str, gcp: Gcp) -> None:
+    """Delete an exisiting dataset from Google Big Query
+
+        Args:
+        - id (str): the dataset id, i.e. '83583NED'
+        - gcp (Gcp): a config object
+
+        Returns:
+        - None
+    """
+    # Construct a bq client
+    client = bigquery.Client(project=gcp.dev.project_id)
+
+    # Delete the dataset and its contents
+    client.delete_dataset(id, delete_contents=True, not_found_ok=True)
+
+    return None
 
 
 def get_description_from_gcs(
@@ -669,8 +707,13 @@ def gcs_to_gbq(
         gcp=gcp,
         gcs_folder=gcs_folder,
     )
+
+    # Check if dataset exists and delete if it does TODO: maybe delete anyway (deleting uses not_found_ok to ignore error if does not exist)
+    if check_bq_dataset(id=id, gcp=gcp):
+        delete_bq_dataset(id=id, gcp=gcp)
+
     # Create a dataset in BQ
-    dataset_id, existing = create_bq_dataset(id=id, description=description, gcp=gcp)
+    dataset_id = create_bq_dataset(id=id, description=description, gcp=gcp)
     # if not existing:
     # Skip?
     # else:
@@ -721,6 +764,7 @@ if __name__ == "__main__":
     cbs_odata_to_gbq("83583NED")
 
 # from statline_bq.config import get_config
+
 # config = get_config("./config.toml")
 
 # description = get_description_v3(
