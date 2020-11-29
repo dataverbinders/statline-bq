@@ -550,12 +550,16 @@ def cbsodatav4_to_gbq(
     return files_parquet  # , data_set_description
 
 
-def create_bq_dataset(id: str, description: str = None, gcp: Gcp = None) -> str:
+def create_bq_dataset(
+    id: str, source: str, odata_version: str, description: str = None, gcp: Gcp = None,
+) -> str:
     """Creates a dataset in Google Big Query. If dataset exists already exists,
     does nothing.
 
     Args:
         - id (str): string to be used as the dataset id
+        - source (str): source to load data into
+        - odata_version (str): 'v3' or 'v4' indicating the version
         - description (str): description for the dataset
         - gcp (Gcp): config object
 
@@ -567,7 +571,7 @@ def create_bq_dataset(id: str, description: str = None, gcp: Gcp = None) -> str:
     client = bigquery.Client(project=gcp.dev.project_id)
 
     # Set dataset_id to the ID of the dataset to create.
-    dataset_id = f"{client.project}.{id}"
+    dataset_id = f"{client.project}.{source}_{odata_version}_{id}"
 
     # Construct a full Dataset object to send to the API.
     dataset = bigquery.Dataset(dataset_id)
@@ -590,11 +594,13 @@ def create_bq_dataset(id: str, description: str = None, gcp: Gcp = None) -> str:
         return dataset.dataset_id
 
 
-def check_bq_dataset(id: str, gcp: Gcp) -> bool:
+def check_bq_dataset(id: str, source: str, odata_version: str, gcp: Gcp = None) -> bool:
     """Check if dataset exists in BQ.
 
     Args:
         - id (str): the dataset id, i.e. '83583NED'
+        - source (str): source to load data into
+        - odata_version (str): 'v3' or 'v4' indicating the version
         - gcp (Gcp): a config object
 
     Returns:
@@ -602,20 +608,26 @@ def check_bq_dataset(id: str, gcp: Gcp) -> bool:
     """
     client = bigquery.Client(project=gcp.dev.project_id)
 
+    dataset_id = f"{source}_{odata_version}_{id}"
+
     try:
-        client.get_dataset(id)  # Make an API request.
-        # print(f"Dataset {id} already exists")
+        client.get_dataset(dataset_id)  # Make an API request.
+        # print(f"Dataset {dataset_id} already exists")
         return True
     except exceptions.NotFound:
-        # print(f"Dataset {id} is not found"
+        # print(f"Dataset {dataset_id} is not found"
         return False
 
 
-def delete_bq_dataset(id: str, gcp: Gcp) -> None:
+def delete_bq_dataset(
+    id: str, source: str = "cbs", odata_version: str = None, gcp: Gcp = None
+) -> None:
     """Delete an exisiting dataset from Google Big Query
 
         Args:
         - id (str): the dataset id, i.e. '83583NED'
+        - source (str): source to load data into
+        - odata_version (str): 'v3' or 'v4' indicating the version
         - gcp (Gcp): a config object
 
         Returns:
@@ -624,8 +636,11 @@ def delete_bq_dataset(id: str, gcp: Gcp) -> None:
     # Construct a bq client
     client = bigquery.Client(project=gcp.dev.project_id)
 
+    # Set bq dataset id string
+    dataset_id = f"{source}_{odata_version}_{id}"
+
     # Delete the dataset and its contents
-    client.delete_dataset(id, delete_contents=True, not_found_ok=True)
+    client.delete_dataset(dataset_id, delete_contents=True, not_found_ok=True)
 
     return None
 
@@ -709,11 +724,17 @@ def gcs_to_gbq(
     )
 
     # Check if dataset exists and delete if it does TODO: maybe delete anyway (deleting uses not_found_ok to ignore error if does not exist)
-    if check_bq_dataset(id=id, gcp=gcp):
-        delete_bq_dataset(id=id, gcp=gcp)
+    if check_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp):
+        delete_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp)
 
     # Create a dataset in BQ
-    dataset_id = create_bq_dataset(id=id, description=description, gcp=gcp)
+    dataset_id = create_bq_dataset(
+        id=id,
+        source=source,
+        odata_version=odata_version,
+        description=description,
+        gcp=gcp,
+    )
     # if not existing:
     # Skip?
     # else:
