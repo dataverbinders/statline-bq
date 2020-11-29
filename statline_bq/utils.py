@@ -338,7 +338,7 @@ def cbsodatav3_to_gbq(
 
         - [dataverbinders/]/cbs_v3_83765NED/83765NED_Observations
 
-    For given dataset id, following tables are uploaded into source (taking `cbs` as default and `83583NED` as example):
+    For given dataset id, following tables are uploaded into GCS and linked in GBQ (taking `cbs` as default and `83583NED` as example):
     - cbs.v3.83583NED_DataProperties: description of topics and dimensions contained in table
     - cbs.v3.83583NED_DimensionName: separate dimension tables
     - cbs.v3.83583NED_TypedDataSet: the TypedDataset
