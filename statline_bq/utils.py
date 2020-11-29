@@ -332,11 +332,11 @@ def cbsodatav3_to_gbq(
     
     In GBQ, the following structure and table names are used:
 
-        - [project/]{source}_{version}/{dataset_id}_{table_name}
+        - [project/]/{source}_{version}_{dataset_id}/{dataset_id}/{table_name}
 
         for example:
 
-        - [dataverbinders/]dataverbinders/cbs_v3/84286NED_TypedDataSet
+        - [dataverbinders/]/cbs_v3_83765NED/83765NED_Observations
 
     For given dataset id, following tables are uploaded into source (taking `cbs` as default and `83583NED` as example):
     - cbs.v3.83583NED_DataProperties: description of topics and dimensions contained in table
@@ -444,11 +444,11 @@ def cbsodatav4_to_gbq(
     
     In GBQ, the following structure and table names are used:
 
-        - [project/]{source}_{version}/{dataset_id}_{table_name}
+        - [project/]/{source}_{version}_{dataset_id}/{dataset_id}/{table_name}
 
         for example:
 
-        - [dataverbinders/]dataverbinders/cbs_v4/83765NED_Observations
+        - [dataverbinders/]/cbs_v4_83765NED/83765NED_Observations
 
     For a given dataset id, the following tables are ALWAYS uploaded into GCS and linked in GBQ
     (taking `cbs` as default and `83765NED` as example):
