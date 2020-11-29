@@ -639,17 +639,17 @@ def get_description_from_gcs(
 ) -> str:
     """Gets previsouly uploaded dataset description from GCS. The description
     should exist in the following file, under the following structure:
-    
+
         - {project}/{bucket}/{source}/{odata_version}/{id}/{YYYYMMDD}/{source}.{odata_version}.{id}_Description
         For example:
         - dataverbinders-dev/cbs/v4/83765NED/20201127/cbs.v4.83765NED_Description.txt
-    
+
     Args:
         - id (str): table ID like `83583NED`
         - source (str): source to load data into
         - odata_version (str): 'v3' or 'v4' indicating the version
         - gcp: config object
-        - gcs_folder (str): "folder" path in gcs        
+        - gcs_folder (str): "folder" path in gcs
     """
     client = storage.Client(project=gcp.dev.project_id)
     bucket = client.get_bucket(gcp.dev.bucket)
@@ -670,7 +670,7 @@ def gcs_to_gbq(
 ):
     """Creates a dataset (if does not exist) in Google Big Query, and underneath
     creates permanent tables linked to parquet file stored in Google Storage. If
-    dataset exists, removes it and recreates it with most up to date uploaded files (?) TODO
+    dataset exists, removes it and recreates it with most up to date uploaded files (?) # TODO: Is this the best logic?
 
     Args:
         - id (str): table ID like `83583NED`
@@ -680,7 +680,7 @@ def gcs_to_gbq(
         - gcp (Gcp): config object
         - gcs_folder (str): "folder" path in gcs
         - file_names (list): list with file names uploaded to gcs TODO: change to get file names from gcs?
-    
+
     Returns:
         - TODO
     """
@@ -780,4 +780,3 @@ if __name__ == "__main__":
 #     gcs_folder="cbs/v3/83583NED/20201126",
 #     file_names=["cbs.v3.83583NED_Bedrijfsgrootte.parquet"],
 # )
-
