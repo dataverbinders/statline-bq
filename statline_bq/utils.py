@@ -14,6 +14,8 @@ from google.cloud import bigquery
 from statline_bq.config import Config, Gcp
 from google.api_core import exceptions
 
+from prefect import task
+
 
 def create_dir(path: Path) -> Path:
     """Checks whether path exists and is directory, and creates it if not.
@@ -147,6 +149,7 @@ def check_v4(id: str, third_party: bool = False) -> bool:
     return v4
 
 
+# @task
 def get_odata_v3(
     target_url: str,
 ):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
