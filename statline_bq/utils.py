@@ -149,7 +149,7 @@ def check_v4(id: str, third_party: bool = False) -> bool:
     return v4
 
 
-# @task
+@task
 def get_odata_v3(
     target_url: str,
 ):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
@@ -768,6 +768,7 @@ def gcs_to_gbq(
     return None  # TODO: Return success/failure/info about table?
 
 
+@task
 def cbs_odata_to_gbq(
     id: str, source: str = "cbs", third_party: bool = False, config: Config = None,
 ):  # TODO -> Add Paths config object):
