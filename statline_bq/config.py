@@ -29,8 +29,12 @@ class Gcp:
 @serialize
 @dataclass(frozen=True)
 class Paths:
-    root: str
-    temp: str
+    root: str = None
+    temp: str = None
+    agb: str = None
+    vektis_open_data: str = None
+    cbs: str = None
+    bag: str = None
 
 
 @deserialize
