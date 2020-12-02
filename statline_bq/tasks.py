@@ -14,6 +14,8 @@ from google.cloud import bigquery
 from statline_bq.config import Config, Gcp
 from google.api_core import exceptions
 
+from prefect import task
+
 
 def create_dir(path: Path) -> Path:
     """Checks whether path exists and is directory, and creates it if not.
@@ -765,6 +767,7 @@ def gcs_to_gbq(
     return None  # TODO: Return success/failure/info about table?
 
 
+@task
 def cbs_odata_to_gbq(
     id: str, source: str = "cbs", third_party: bool = False, config: Config = None,
 ):  # TODO -> Add Paths config object):
