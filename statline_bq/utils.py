@@ -506,7 +506,7 @@ def cbsodata_to_gbq(
         - source (str): source to load data into
         - config: config object
 
-    Return:
+    Returns:
         - List[google.cloud.bigquery.job.LoadJob]
 
     [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-opendata-services.pdf
@@ -555,6 +555,33 @@ def cbsodata_to_gbq(
 
 
 def get_urls(id: str, odata_version: str, third_party: bool = False):
+    """For a given dataset id from CBS, returns a dict with urls of all dataset tables.
+
+    Args:
+        - id (str): table ID like `83583NED`
+        - odata_version (str): either 'v3' or 'v4', indicating the version of the original odata in the source
+        - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl (not available yet for v4)
+
+    Returns:
+        - urls (dict[str]): list containing all urls of a the dataset's tables
+
+    Examples:
+        ```
+        >>> dataset_id = '83583NED'
+        >>> urls = get_urls(id=dataset_id, odata_version='v3', third_party=False)
+        >>> for name, url in urls.items():
+                print(f"{name}: {url}")
+        TableInfos: https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos
+        UntypedDataSet: https://opendata.cbs.nl/ODataFeed/odata/83583NED/UntypedDataSet
+        TypedDataSet: https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet
+        DataProperties: https://opendata.cbs.nl/ODataFeed/odata/83583NED/DataProperties
+        CategoryGroups: https://opendata.cbs.nl/ODataFeed/odata/83583NED/CategoryGroups
+        BedrijfstakkenBranchesSBI2008: https://opendata.cbs.nl/ODataFeed/odata/83583NED/BedrijfstakkenBranchesSBI2008
+        Bedrijfsgrootte: https://opendata.cbs.nl/ODataFeed/odata/83583NED/Bedrijfsgrootte
+        Perioden: https://opendata.cbs.nl/ODataFeed/odata/83583NED/Perioden 
+        ```
+        
+    """
     if odata_version == "v4":
         base_url = {
             True: None,  # currently no IV3 links in ODATA V4,
