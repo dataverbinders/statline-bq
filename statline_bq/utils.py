@@ -15,6 +15,31 @@ from statline_bq.config import Config, Gcp
 from google.api_core import exceptions
 
 
+def check_v4(id: str, third_party: bool = False) -> str:
+    """
+    Check whether a certain CBS table exists as odata v4.
+
+    Args:
+        - id (str): table ID like `83583NED`
+        - third_party (boolean): 'odata4.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl (not available in v4 yet)        
+
+    Returns:
+        - odata_version (str): 'v4' if exists as odata v4, 'v3' otherwise.
+    """
+    base_url = {
+        True: None,  # currently no IV3 links in ODATA V4,
+        False: f"https://odata4.cbs.nl/CBS/{id}",
+    }
+    r = requests.get(base_url[third_party])
+    if (
+        r.status_code == 200
+    ):  # TODO: Is this the best check to use? Maybe if not 404? Or something else?
+        odata_version = "v4"
+    else:
+        odata_version = "v3"
+    return odata_version
+
+
 def create_dir(path: Path) -> Path:
     """Checks whether path exists and is directory, and creates it if not.
 
@@ -34,24 +59,39 @@ def create_dir(path: Path) -> Path:
         return None
 
 
-def get_dataset_description(urls: list, odata_version: str):
-    """Wrapper function to call appropriate function to get dataset
-    description according to the odata version - 'v3' or 'v4'
-    """
-    if odata_version == "v4":
-        return get_dataset_description_v4(urls["Properties"])
-    elif odata_version == "v3":
-        return get_dataset_description_v3(urls["TableInfos"])
-    else:
-        ValueError("odata version must be either 'v3' or 'v4'")
+def get_dataset_description(urls: dict, odata_version: str) -> str:
+    """Wrapper function to call the correct version function which in
+    turn gets the dataset description according to the odata version: 
+    'v3' or 'v4'.
 
-
-def get_dataset_description_v3(url_table_infos: str):
-    """Getting the descriptions of columns from a data set given in url_table_infos.
     Args:
-        - url_table_infos (str): url of TableInfos table as String.
-    Return:
-        - dict{'column_name':'description'}
+        - urls (dict): dictionary holding all urls of the dataset from CBS.
+        urls["Properties"] (for v4) or urls["TableInfos"] (for v3) must be
+        present in order to access the dataset description.
+        - odata_version (str): version of the odata for this dataset - must
+        be either 'v3' or 'v4.
+
+    Returns:
+        - description (str): string with the description of the dataset from CBS.
+    """
+    if odata_version.lower() == "v4":
+        description = get_dataset_description_v4(urls["Properties"])
+    elif odata_version.lower() == "v3":
+        description = get_dataset_description_v3(urls["TableInfos"])
+    else:
+        raise ValueError("odata version must be either 'v3' or 'v4'")
+    return description
+
+
+def get_dataset_description_v3(url_table_infos: str) -> str:
+    """Gets the description of a v3 odata dataset from CBS
+    provided in url_table_infos.
+
+    Args:
+        - url_table_infos (str): url of TableInfos table as string.
+
+    Returns:
+        - description (str): a string with the dataset's description
     """
     # Get JSON format of data set.
     url_table_infos = "?".join((url_table_infos, "$format=json"))
@@ -63,17 +103,6 @@ def get_dataset_description_v3(url_table_infos: str):
     # Get short description as text
     description = data_info_values[0]["ShortDescription"]
 
-    # dict_description = {}
-
-    # # Only dict's containing the key 'Key' has information about table columns.
-    # for i in data_info_values:
-    #     if i["Key"] != "":
-    #         # Make description shorter, since BigQuery only allows 1024 characters
-    #         if i["Description"] is not None and len(i["Description"]) > 1024:
-    #             i["Description"] = i["Description"][:1021] + "..."
-
-    #         dict_description[i["Key"]] = i["Description"]
-
     return description
 
 
@@ -84,20 +113,39 @@ def get_dataset_description_v4(url_table_properties: str) -> str:
         - url_table_properties (str): url of the data set `Properties`
 
     Returns:
-        - String: table_description
+        - description (str): a string with the dataset's description
     """
     r = requests.get(url_table_properties).json()
     return r["Description"]
 
 
 def write_description_to_file(
-    pq_dir: Path,
+    id: str,
+    description_text: str,
+    pq_dir: Union[Path, str],
     source: str = "cbs",
     odata_version: str = None,
-    id: str = None,
-    description_text: str = None,
 ) -> Path:
-    """Writes a dataset description string into a txt file and places that file in the directory of that dataset's tables
+    """Writes a dataset description string into a txt file and places that
+    file in a directory alongside the rest of that dataset's tables (assuming
+    it, and they exist). The file is named according to the same conventions
+    used for the tables, and placed in the directory accordingly, namely:
+
+        "{source}.{odata_version}.{id}_Description.txt"
+
+    for example:
+
+        "cbs.v3.83583NED_Description.txt"
+
+    Args:
+        - id (str): dataset id
+        - description_text (str): string with text to be written into the file.
+        - pq_dir (Path, str): path to directory where the file will be stored.
+        - source (str): the source of the dataset (default = "cbs")
+        - odata_version (str) version of dataset's odata - intended to be 'v3' or 'v4'
+
+    Returns:
+        - description_file (Path): path object to text file
     """
     description_file = Path(pq_dir) / Path(
         f"{source}.{odata_version}.{id}_Description.txt"
@@ -149,31 +197,6 @@ def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=
             target_url = None
 
     return bag
-
-
-def check_v4(id: str, third_party: bool = False) -> bool:
-    """
-    Check whether a certain CBS table exists as odata v4
-
-    Args:
-        - id (str): table ID like `83583NED`
-        - third_party (boolean): 'odata4.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl (not available in v4 yet)        
-
-    Returns:
-        - v4 (bool): True if exists as odata v4, False otherwise
-    """
-    base_url = {
-        True: None,  # currently no IV3 links in ODATA V4,
-        False: f"https://odata4.cbs.nl/CBS/{id}",
-    }
-    r = requests.get(base_url[third_party])
-    if (
-        r.status_code == 200
-    ):  # TODO: Is this the best check to use? Maybe if not 404? Or something else?
-        v4 = True
-    else:
-        v4 = False
-    return v4
 
 
 def get_odata(target_url: str, odata_version: str):
@@ -662,11 +685,11 @@ def cbsodatav4_to_gbq(
     description_text = get_dataset_description(urls, odata_version=odata_version)
 
     write_description_to_file(
+        id=id,
+        description_text=description_text,
         pq_dir=pq_dir,
         source=source,
         odata_version=odata_version,
-        id=id,
-        description_text=description_text,
     )
     # description_file = pq_dir / Path(f"{source}.{odata_version}.{id}_Description.txt")
     # with open(description_file, "w+") as f:
@@ -918,7 +941,7 @@ def cbs_odata_to_gbq(
 
     print(f"Processing dataset {id}")
     # Check if v4
-    if check_v4(id=id, third_party=third_party):
+    if check_v4(id=id, third_party=third_party) == "v4":
         cbsodatav4_to_gbq(id=id, source=source, third_party=third_party, config=config)
     else:
         cbsodatav3_to_gbq(id=id, source=source, third_party=third_party, config=config)
