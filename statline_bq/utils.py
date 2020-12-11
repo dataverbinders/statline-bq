@@ -41,7 +41,7 @@ def check_v4(id: str, third_party: bool = False) -> str:
 
 
 def create_dir(path: Path) -> Path:
-    """Checks whether path exists and is directory, and creates it if not.
+    """Checks whether path exists and is a directory, and creates it if not.
 
     Args:
         - path (Path): path to check
@@ -155,6 +155,7 @@ def write_description_to_file(
     return description_file
 
 
+# Currently not implemented. Possibly not needed.
 def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=100000 ath the end - returns same data as first link
     target_url: str,
 ):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
@@ -212,19 +213,30 @@ def get_odata(target_url: str, odata_version: str):
 
 def get_odata_v3(
     target_url: str,
-):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
-    # TODO -> Change requests to CURL command
+):  # TODO -> How to define Bag for type hinting? (maybe here: https://docs.python.org/3/library/typing.html#newtype)
     """Gets a table from a specific url for CBS Odata v3.
+    This function uses standard requests.get() to retrieve data at target_url
+    in json format, and concats it all into a Dask Bag to handle memory
+    overflow if needed.
+
+    Each request from CBS is limited to 10,000 rows, and if more data exists
+    the key "odata.nextLink" exists in the response with the link to the next
+    10,000 (or less) rows.
 
     Args:
         - target_url (str): url of the table
 
     Returns:
-        - data (Dask bag): all data received from target url as json type, in a Dask bag
+        - data (Dask bag): all data received from target url as json type,
+        concatenated in a Dask bag
     """
     print(f"Fetching from {target_url}")
     # First call target url and get json formatted response as dict
     r = requests.get(target_url).json()
+
+    # Initialize bag as None
+    bag = None
+
     # Create Dask bag from dict (check if not empty field)
     if r["value"]:
         bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
@@ -247,17 +259,20 @@ def get_odata_v3(
         else:
             target_url = None
 
-    if "bag" in locals():
-        return bag
-    else:
-        return None
+    return bag
 
 
 def get_odata_v4(
     target_url: str,
-):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
-    # TODO -> Change requests to CURL command
+):  # TODO -> How to define Bag for type hinting? (maybe here: https://docs.python.org/3/library/typing.html#newtype)
     """Gets a table from a specific url for CBS Odata v4.
+    This function uses standard requests.get() to retrieve data at target_url
+    in json format, and concats it all into a Dask Bag to handle memory
+    overflow if needed.
+
+    Each request from CBS is limited to 10,000 rows, and if more data exists
+    the key "@odata.nextLink" exists in the response with the link to the next
+    10,000 (or less) rows.
 
     Args:
         - target_url (str): url of the table
@@ -294,75 +309,89 @@ def get_odata_v4(
 def convert_table_to_parquet(
     bag, file_name: str, out_dir: Union[str, Path]
 ) -> Path:  # (TODO -> IS THERE A FASTER/BETTER WAY??)
-    """ Converts a table to a parquet form and stores it on disk
+    """Converts a dask bag holding data from a CBS table to Parquet form
+    and stores it on disk. The bag should be filled by dicts (can be nested)
+    which can be serialized as json.
+
+    The current implementation iterates over each bag partition and dumps
+    it into a json file, then appends all file into a single json file. That json
+    file is then read into a PyArrow table, and finally that table is written as
+    a parquet file to disk.
 
     Args:
-        - bag: a Dask bag holding with nested dicts in json format  # TODO -> not sure this is a correct description
-        - file_name: name of the file to store on disl
-        - out_dir: path to directory to store file
-
+        - bag: a Dask bag holding (possibly nested) dicts that can serialized as json
+        - file_name (str): name of the file to store on disl
+        - out_dir (str, Path): path to directory to store file
+    
+    Returns:
+        - pq_path (Path): path to output parquet file
     """
     # create directories to store files
     out_dir = Path(out_dir)
-    temp_ndjson_dir = Path("./temp/ndjson")
-    create_dir(temp_ndjson_dir)
+    temp_json_dir = Path("./temp/json")
+    create_dir(temp_json_dir)
     create_dir(out_dir)
 
     # File path to dump table as ndjson
-    ndjson_path = Path(f"{temp_ndjson_dir}/{file_name}.ndjson")
+    json_path = Path(f"{temp_json_dir}/{file_name}.json")
     # File path to create as parquet file
     pq_path = Path(f"{out_dir}/{file_name}.parquet")
 
     # Dump each bag partition to json file
-    bag.map(json.dumps).to_textfiles(temp_ndjson_dir / "*.json")
+    bag.map(json.dumps).to_textfiles(temp_json_dir / "*.json")
     # Get all json file names with path
-    filenames = sorted(glob(str(temp_ndjson_dir) + "/*.json"))
+    filenames = sorted(glob(str(temp_json_dir) + "/*.json"))
     # Append all jsons into a single file  ## Also possible to use Dask Delayed here https://stackoverflow.com/questions/39566809/writing-dask-partitions-into-single-file
-    with open(ndjson_path, "w+") as ndjson:
+    with open(json_path, "w+") as json_file:
         for fn in filenames:
             with open(fn) as f:
-                ndjson.write(f.read())
+                json_file.write(f.read())
             os.remove(fn)
 
-    # # Dump as ndjson format
-    # with open(ndjson_path, 'w+') as ndjson:
+    # # Works without converting to ndjson - might be needed in a different implementation?
+    # # Convert to ndjson format
+    # with open(json_path, 'w+') as ndjson:
     #     for record in table:
     #         ndjson.write(json.dumps(record) + "\n")
 
     # Create PyArrow table from ndjson file
-    pa_table = pa_json.read_json(ndjson_path)
+    pa_table = pa_json.read_json(json_path)
 
     # Store parquet table #TODO -> set proper data types in parquet file
     pq.write_table(pa_table, pq_path)
 
     # Remove temp ndjson file
-    os.remove(ndjson_path)
+    os.remove(json_path)
     # Remove temp folder if empty  #TODO -> inefficiently(?) creates and removes the folder each time the function is called
-    if not os.listdir(temp_ndjson_dir):
-        os.rmdir(temp_ndjson_dir)
+    if not os.listdir(temp_json_dir):
+        os.rmdir(temp_json_dir)
     return pq_path
 
 
 def upload_to_gcs(dir: Path, source: str, odata_version: str, id: str, config: Config):
-    """Uploads all files in a given directory to GCS, using the following structure:
-    'project_name/bucket_name/source/odata_version/id/YYYYMMDD/filename'
+    """Uploads all files in a given directory to GCS, and places each files
+    with the following 'folder' structure in GCS:
     
-    Meant to be used for uploading all tables for a certain dataset retrieved from CBS API,
-    and hence to upload (for example) into:
-        'dataverbinders/dataverbinders/cbs/v4/83765NED/
-    The following datasetsfiles:
+        - '{project_name}/{bucket_name}/{source}/{odata_version}/{id}/{YYYYMMDD}/{filename}'
+    
+    Meant to be used for uploading all tables of a certain dataset retrieved
+    from CBS API, and hence to upload (for example) into:
+        
+        - 'dataverbinders/dataverbinders/cbs/v4/83765NED/20201104/
+    
+    the following tables:
         - cbs.82807NED_Observations.parquet
         - cbs.82807NED_PeriodenCodes.parquet
         - etc...
     
     Args:
-        - dir: A Path object to a directory containing files to be uploaded
-        - source: source to load data into
-        - odata_version: 'v4' or 'v3', stating the version of the original odata retrieved
+        - dir (Path): A Path object to a directory containing files to be uploaded
+        - source (str): source to load data into
+        - odata_version (str): 'v4' or 'v3', stating the version of the original odata retrieved
         - id (str): table ID like `83583NED`
 
     Returns:
-        - None  # TODO -> Return success/ fail code?
+        - gcs_folder (str): the folder into which the tables have been uploaded # TODO -> Return success/ fail code?/job ID
     """
     # Initialize Google Storage Client, get bucket, set blob
     gcs = storage.Client(
@@ -375,18 +404,48 @@ def upload_to_gcs(dir: Path, source: str, odata_version: str, id: str, config: C
     # Upload file
     for pfile in os.listdir(dir):
         gcs_blob = gcs_bucket.blob(gcs_folder + "/" + pfile)
-        job = gcs_blob.upload_from_filename(
+        gcs_blob.upload_from_filename(
             dir / pfile
         )  # TODO: job currently returns None. Also how to handle if we get it?
 
-    return gcs_folder  # TODO: job Currently returns None
+    return gcs_folder  # TODO: return job id, if possible
 
 
 def get_file_names(paths: Iterable[Path]) -> list:
-    """ Gets an iterable with Path objects, and returns an iterable with the file names only
-        """
+    """ Gets an iterable with Path objects, and returns an iterable with the
+    file names only.
+
+    Example:
+    ```
+        >>> from pathlib import Path
+
+        >>> path1 = Path('some_folder/other_folder/some_file.txt')
+        >>> path2 = Path('some_folder/different_folder/another_file.png')
+        >>> full_paths = [path1, path2]
+
+        >>> file_names = get_file_names(full_paths)
+
+        >>> for name in file_names:
+                print(name)
+        some_file.txt
+        another_file.png
+    ```
+    
+
+    Args:
+        - paths (list-like[Path]): an iterable of Path objects
+
+    Returns:
+        - file_names (list[str]): a list holding all file names with their extension
+    """
     file_names = [Path(path.name) for path in paths]
     return file_names
+
+
+# %%
+from statline_bq.utils import get_file_names
+
+# %%
 
 
 def cbsodatav3_to_gbq(
