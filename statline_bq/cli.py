@@ -1,5 +1,5 @@
 import click
-from statline_bq.utils import cbs_odata_to_gbq
+from statline_bq.utils import main
 from statline_bq.config import get_config, get_datasets
 from pathlib import Path
 
@@ -36,4 +36,4 @@ def upload_datasets():
         click.echo(f"{i+1}. {dataset}")
     click.echo("")
     for id in datasets:
-        cbs_odata_to_gbq(id=id, config=config)
+        main(id=id, config=config)

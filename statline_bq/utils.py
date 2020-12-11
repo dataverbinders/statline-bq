@@ -427,6 +427,7 @@ def get_file_names(paths: Iterable[Path]) -> list:
 
         >>> for name in file_names:
                 print(name)
+        
         some_file.txt
         another_file.png
     ```
@@ -442,25 +443,23 @@ def get_file_names(paths: Iterable[Path]) -> list:
     return file_names
 
 
-# %%
-from statline_bq.utils import get_file_names
-
-# %%
-
-
-def cbsodatav3_to_gbq(
-    id: str, third_party: bool = False, source: str = "cbs", config: Config = None
+def cbsodata_to_gbq(
+    id: str,
+    odata_version: str,
+    third_party: bool = False,
+    source: str = "cbs",
+    config: Config = None,
 ):
-    """Load CBS odata v3 into Google Cloud Storage as parquet files. Then, it creates a new permanenet
-    table in Google Big Query, linked to the dataset.
+    """Load CBS dataset into Google Cloud Storage as parquet files. Then,
+    create a new permanenet table in Google Big Query, linked to the dataset.
 
-    In GCS, the following "folders" and filenames' structure is used:
+    In GCS, the following "folders" and filenames structure is used:
 
-        - [project/]{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet
+        - {project_name}/{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet
 
         for example:
 
-        - [dataverbinders/]dataverbinders/cbs/v3/84286NED/20201125/cbs.v3.84286NED_TypedDataSet.parquet
+        - dataverbinders/dataverbinders/cbs/v3/84286NED/20201125/cbs.v3.84286NED_TypedDataSet.parquet
     
     In GBQ, the following structure and table names are used:
 
@@ -470,15 +469,39 @@ def cbsodatav3_to_gbq(
 
         - [dataverbinders/]/cbs_v3_83765NED/83765NED_Observations
 
-    For given dataset id, following tables are uploaded into GCS and linked in GBQ (taking `cbs` as default and `83583NED` as example):
+    Odata version 3
+    ---------------
+
+    For given dataset id, following tables are uploaded into GCS and linked in
+    GBQ (taking `cbs` as default and `83583NED` as example):
     - cbs.v3.83583NED_DataProperties: description of topics and dimensions contained in table
     - cbs.v3.83583NED_DimensionName: separate dimension tables
     - cbs.v3.83583NED_TypedDataSet: the TypedDataset
     - cbs.v3.83583NED_CategoryGroups: grouping of dimensions
-    See Handleiding CBS Open Data Services (v3)[^odatav3] for details.
+    
+    See 'Handleiding CBS Open Data Services (v3)'[^odatav3] for details.
+
+    Odata Version 4
+    ---------------
+
+    For a given dataset id, the following tables are ALWAYS uploaded into GCS
+    and linked in GBQ (taking `cbs` as default and `83765NED` as example):
+        - ``cbs.v4.83765NED_Observations``: The actual values of the dataset
+        - ``cbs.v4.83765NED_MeasureCodes``: Describing the codes that appear in the Measure column of the Observations table.
+        - ``cbs.v4.83765NED_Dimensions``: Information over the dimensions
+
+    Additionally, this function will upload all other tables in the dataset, except `Properties`.
+        These may include:
+            - ``cbs.v4.83765NED_MeasureGroups``: Describing the hierarchy of the Measures
+        And, for each Dimensionlisted in the `Dimensions` table (i.e. `{Dimension_1}`)
+            - ``cbs.v4.83765NED_{Dimension_1}Codes
+            - ``cbs.v4.83765NED_{Dimension_1}Groups [IF IT EXISTS]
+
+    See `Informatie voor Ontwikelaars`[^odatav4] for details.
 
     Args:
         - id (str): table ID like `83583NED`
+        - odata_version (str): either 'v3' or 'v4', indicating the version of the original odata in the source
         - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
         - source (str): source to load data into
         - config: config object
@@ -487,53 +510,28 @@ def cbsodatav3_to_gbq(
         - List[google.cloud.bigquery.job.LoadJob]
 
     [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-opendata-services.pdf
+    [^odatav4]: https://dataportal.cbs.nl/info/ontwikkelaars
     """
-    odata_version = "v3"
-
+    # Get all tablbe urls for given dataset id
     urls = get_urls(id=id, odata_version=odata_version, third_party=third_party)
-
+    # Create directory to store parquest files locally
     pq_dir = create_named_dir(
         id=id, odata_version=odata_version, source=source, config=config
     )
-    # # Get paths from config object
-    # root = Path.home() / Path(config.paths.root)
-    # temp = root / Path(config.paths.temp)
-
-    # pq_dir = temp / Path(
-    #     f"{source}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
-    # )
-    # create_dir(pq_dir)
-    # # TableInfos is redundant --> use https://opendata.cbs.nl/ODataCatalog/Tables?$format=json
-    # # UntypedDataSet is redundant --> use TypedDataSet
-    # for key, url in [
-    #     (k, v) for k, v in urls.items() if k not in ("TableInfos", "UntypedDataSet")
-    # ]:
-    #     url = "?".join((url, "$format=json"))
-
-    #     # Create table name to be used in GCS
-    #     table_name = f"{source}.{odata_version}.{id}_{key}"
-
-    #     # Get data from source
-    #     table = get_odata_v3(url)
-
-    #     # Check if get_odata_v3 returned None (when link in CBS returns empty table, i.e. CategoryGroups in "84799NED")
-    #     if table is not None:
-
-    #         # Convert to parquet
-    #         pq_path = convert_table_to_parquet(table, table_name, pq_dir)
-
-    #         # Add path of file to set
-    #         files_parquet.add(pq_path)
-
+    # fetch each table from urls, convert to parquet and store locally
     files_parquet = tables_to_parquet(
         id=id, urls=urls, odata_version=odata_version, source=source, pq_dir=pq_dir
     )
-    # Get the description of the data set
+    # Get the description of the data set from CBS
     description_text = get_dataset_description(urls, odata_version=odata_version)
-
-    description_file = pq_dir / Path(f"{source}.{odata_version}.{id}_Description.txt")
-    with open(description_file, "w+") as f:
-        f.write(description_text)
+    # Write description text to txt file and store in dataset directory with parquet tables
+    write_description_to_file(
+        id=id,
+        description_text=description_text,
+        pq_dir=pq_dir,
+        source=source,
+        odata_version=odata_version,
+    )
 
     # Upload to GCS
     gcs_folder = upload_to_gcs(pq_dir, source, odata_version, id, config)
@@ -653,126 +651,6 @@ def tables_to_parquet(
             files_parquet.add(pq_path)
 
     return files_parquet
-
-
-def cbsodatav4_to_gbq(
-    id: str, source: str = "cbs", third_party: bool = False, config: Config = None
-):  # TODO -> Add Paths config objects
-    """Load CBS odata v4 into Google Cloud Storage as parquet files. Then, it creates a new permanenet
-    table in Google Big Query, linked to the dataset.
-
-    In GCS, the following "folders" and filenames' structure is used:
-
-        - [project/]{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet
-
-        for example:
-
-        - [dataverbinders/]dataverbinders/cbs/v4/83765NED/20201125/cbs.v4.83765NED_Observationst.parquet
-    
-    In GBQ, the following structure and table names are used:
-
-        - [project/]/{source}_{version}_{dataset_id}/{dataset_id}/{table_name}
-
-        for example:
-
-        - [dataverbinders/]/cbs_v4_83765NED/83765NED_Observations
-
-    For a given dataset id, the following tables are ALWAYS uploaded into GCS and linked in GBQ
-    (taking `cbs` as default and `83765NED` as example):
-        - ``cbs.v4.83765NED_Observations``: The actual values of the dataset
-        - ``cbs.v4.83765NED_MeasureCodes``: Describing the codes that appear in the Measure column of the Observations table. 
-        - ``cbs.v4.83765NED_Dimensions``: Information over the dimensions
-
-    Additionally, this function will upload all other tables in the dataset, except `Properties`.
-        These may include:
-            - ``cbs.v4.83765NED_MeasureGroups``: Describing the hierarchy of the Measures
-        And, for each Dimensionlisted in the `Dimensions` table (i.e. `{Dimension_1}`)
-            - ``cbs.v4.83765NED_{Dimension_1}Codes
-            - ``cbs.v4.83765NED_{Dimension_1}Groups [IF IT EXISTS]
-
-    See `Informatie voor ontwikelaars <https://dataportal.cbs.nl/info/ontwikkelaars>` for details.
-
-    Args:
-        - id (str): table ID like `83583NED`
-        - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
-        - source (str): source to load data into
-        - credentials: GCP credentials
-        - GCP: config object
-        - paths: config object for output directory
-
-    Return:
-        - Set: Paths to Parquet files
-        - String: table_description
-    """
-    odata_version = "v4"
-
-    urls = get_urls(id=id, odata_version=odata_version, third_party=third_party)
-
-    pq_dir = create_named_dir(
-        id=id, odata_version=odata_version, source=source, config=config
-    )
-    # # Create placeholders for storage
-    # files_parquet = set()
-
-    # # Iterate over all tables related to dataset, excepet Properties (TODO -> double check that it is redundandt)
-    # for key, url in [
-    #     (k, v)
-    #     for k, v in urls.items()
-    #     if k not in ("Properties")
-    #     # TEMP - FOR QUICKER TESTS OMIT OBSERVATIONS FROM PROCESSING
-    #     # (k, v) for k, v in urls.items() if k not in ("Observations", "Properties")
-    # ]:
-
-    #     # Create table name to be used in GCS
-    #     table_name = f"{source}.{odata_version}.{id}_{key}"
-
-    #     # Get data from source
-    #     table = get_odata_v4(url)
-
-    #     # Convert to parquet
-    #     pq_path = convert_table_to_parquet(table, table_name, pq_dir)
-
-    #     # Add path of file to set
-    #     files_parquet.add(pq_path)
-
-    ## Download datasets from CBS and converting to Parquet
-    files_parquet = tables_to_parquet(
-        id=id, urls=urls, odata_version=odata_version, source=source, pq_dir=pq_dir
-    )
-
-    # Get the description of the data set
-    description_text = get_dataset_description(urls, odata_version=odata_version)
-
-    write_description_to_file(
-        id=id,
-        description_text=description_text,
-        pq_dir=pq_dir,
-        source=source,
-        odata_version=odata_version,
-    )
-    # description_file = pq_dir / Path(f"{source}.{odata_version}.{id}_Description.txt")
-    # with open(description_file, "w+") as f:
-    #     f.write(description_text)
-
-    # Upload to GCS
-    gcs_folder = upload_to_gcs(pq_dir, source, odata_version, id, config)
-
-    # Keep only names
-    file_names = get_file_names(
-        files_parquet
-    )  # TODO: Does it matter we change a set to a list here?
-    # Create table in GBQ
-    gcs_to_gbq(
-        id=id,
-        source=source,
-        odata_version=odata_version,
-        third_party=third_party,
-        config=config,
-        gcs_folder=gcs_folder,
-        file_names=file_names,
-    )
-
-    return files_parquet  # , data_set_description TODO: What returns here?
 
 
 def create_bq_dataset(
@@ -994,16 +872,34 @@ def gcs_to_gbq(
     return None  # TODO Return job id
 
 
-def cbs_odata_to_gbq(
-    id: str, source: str = "cbs", third_party: bool = False, config: Config = None,
-):  # TODO -> Add Paths config object):
+# def cbs_odata_to_gbq(
+#     id: str, source: str = "cbs", third_party: bool = False, config: Config = None,
+# ):  # TODO -> Add Paths config object):
 
+#     print(f"Processing dataset {id}")
+#     # Check if v4
+#     if check_v4(id=id, third_party=third_party) == "v4":
+#         cbsodatav4_to_gbq(id=id, source=source, third_party=third_party, config=config)
+#     else:
+#         cbsodatav3_to_gbq(id=id, source=source, third_party=third_party, config=config)
+#     print(
+#         f"Completed dataset {id}"
+#     )  # TODO - add response from google if possible (some success/failure flag)
+#     return None
+
+
+def main(
+    id: str, source: str = "cbs", third_party: bool = False, config: Config = None,
+):
     print(f"Processing dataset {id}")
-    # Check if v4
-    if check_v4(id=id, third_party=third_party) == "v4":
-        cbsodatav4_to_gbq(id=id, source=source, third_party=third_party, config=config)
-    else:
-        cbsodatav3_to_gbq(id=id, source=source, third_party=third_party, config=config)
+    odata_version = check_v4(id=id, third_party=third_party)
+    cbsodata_to_gbq(
+        id=id,
+        odata_version=odata_version,
+        third_party=third_party,
+        source=source,
+        config=config,
+    )
     print(
         f"Completed dataset {id}"
     )  # TODO - add response from google if possible (some success/failure flag)
@@ -1014,7 +910,7 @@ if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    cbs_odata_to_gbq("83583NED", config=config)
+    main("83583NED", config=config)
 
 # from statline_bq.config import get_config
 
