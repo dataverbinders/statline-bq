@@ -208,7 +208,7 @@ def get_odata(target_url: str, odata_version: str):
     elif odata_version == "v3":
         return get_odata_v3(target_url)
     else:
-        ValueError("odata version must be either 'v3' or 'v4'")
+        raise ValueError("odata version must be either 'v3' or 'v4'")
 
 
 def get_odata_v3(
@@ -555,29 +555,27 @@ def cbsodata_to_gbq(
 
 
 def get_urls(id: str, odata_version: str, third_party: bool = False):
-    base_url = {
-        "v4": {
+    if odata_version == "v4":
+        base_url = {
             True: None,  # currently no IV3 links in ODATA V4,
             False: f"https://odata4.cbs.nl/CBS/{id}",
-        },
-        "v3": {
+        }
+        urls = {
+            item["name"]: base_url[third_party] + "/" + item["url"]
+            for item in get_odata_v4(base_url[third_party])
+        }
+    elif odata_version == "v3":
+        base_url = {
             True: f"https://dataderden.cbs.nl/ODataFeed/odata/{id}?$format=json",
             False: f"https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json",
-        },
-    }
-    urls = {
-        "v4": {
-            item["name"]: base_url[odata_version][third_party] + "/" + item["url"]
-            for item in get_odata_v4(base_url[odata_version][third_party])
-        },
-        "v3": {
+        }
+        urls = {
             item["name"]: item["url"]
-            for item in requests.get(base_url[odata_version][third_party]).json()[
-                "value"
-            ]
-        },
-    }
-    return urls[odata_version]
+            for item in requests.get(base_url[third_party]).json()["value"]
+        }
+    else:
+        raise ValueError("odata version must be either 'v3' or 'v4'")
+    return urls
 
 
 def create_named_dir(
