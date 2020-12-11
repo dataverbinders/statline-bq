@@ -453,51 +453,55 @@ def cbsodata_to_gbq(
     """Load CBS dataset into Google Cloud Storage as parquet files. Then,
     create a new permanenet table in Google Big Query, linked to the dataset.
 
-    In GCS, the following "folders" and filenames structure is used:
+    In **GCS**, the following "folders" and filenames structure is used:
 
-        - {project_name}/{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet
+    - {project_name}/{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet
 
-        for example:
+    for example:
 
-        - dataverbinders/dataverbinders/cbs/v3/84286NED/20201125/cbs.v3.84286NED_TypedDataSet.parquet
-    
-    In GBQ, the following structure and table names are used:
+    - dataverbinders/dataverbinders/cbs/v3/84286NED/20201125/cbs.v3.84286NED_TypedDataSet.parquet
+    _________
+    In **BQ**, the following structure and table names are used:
 
-        - [project/]/{source}_{version}_{dataset_id}/{dataset_id}/{table_name}
+    - [project/]/{source}_{version}_{dataset_id}/{dataset_id}/{table_name}
 
-        for example:
+    for example:
 
-        - [dataverbinders/]/cbs_v3_83765NED/83765NED_Observations
-
+    - [dataverbinders/]/cbs_v3_83765NED/83765NED_Observations
+    _________
     Odata version 3
     ---------------
 
     For given dataset id, following tables are uploaded into GCS and linked in
     GBQ (taking `cbs` as default and `83583NED` as example):
-    - cbs.v3.83583NED_DataProperties: description of topics and dimensions contained in table
-    - cbs.v3.83583NED_DimensionName: separate dimension tables
-    - cbs.v3.83583NED_TypedDataSet: the TypedDataset
-    - cbs.v3.83583NED_CategoryGroups: grouping of dimensions
-    
-    See 'Handleiding CBS Open Data Services (v3)'[^odatav3] for details.
 
+    - cbs.v3.83583NED_DataProperties: Description of topics and dimensions contained in table
+    - cbs.v3.83583NED_DimensionName: Separate dimension tables
+    - cbs.v3.83583NED_TypedDataSet: The TypedDataset (main table)
+    - cbs.v3.83583NED_CategoryGroups: Grouping of dimensions
+    
+    See *Handleiding CBS Open Data Services (v3)*[^odatav3] for details.
+    _________
     Odata Version 4
     ---------------
 
     For a given dataset id, the following tables are ALWAYS uploaded into GCS
     and linked in GBQ (taking `cbs` as default and `83765NED` as example):
-        - ``cbs.v4.83765NED_Observations``: The actual values of the dataset
-        - ``cbs.v4.83765NED_MeasureCodes``: Describing the codes that appear in the Measure column of the Observations table.
-        - ``cbs.v4.83765NED_Dimensions``: Information over the dimensions
+
+    - cbs.v4.83765NED_Observations: The actual values of the dataset
+    - cbs.v4.83765NED_MeasureCodes: Describing the codes that appear in the Measure column of the Observations table.
+    - cbs.v4.83765NED_Dimensions: Information over the dimensions
 
     Additionally, this function will upload all other tables in the dataset, except `Properties`.
-        These may include:
-            - ``cbs.v4.83765NED_MeasureGroups``: Describing the hierarchy of the Measures
-        And, for each Dimensionlisted in the `Dimensions` table (i.e. `{Dimension_1}`)
-            - ``cbs.v4.83765NED_{Dimension_1}Codes
-            - ``cbs.v4.83765NED_{Dimension_1}Groups [IF IT EXISTS]
+        
+    These may include:
+    - cbs.v4.83765NED_MeasureGroups: Describing the hierarchy of the Measures
+    
+    And, for each Dimensionlisted in the `Dimensions` table (i.e. `{Dimension_1}`)
+    - cbs.v4.83765NED_{Dimension_1}Codes
+    - cbs.v4.83765NED_{Dimension_1}Groups [IF IT EXISTS]
 
-    See `Informatie voor Ontwikelaars`[^odatav4] for details.
+    See *Informatie voor Ontwikelaars*[^odatav4] for details.
 
     Args:
         - id (str): table ID like `83583NED`
@@ -507,7 +511,7 @@ def cbsodata_to_gbq(
         - config: config object
 
     Returns:
-        - List[google.cloud.bigquery.job.LoadJob]
+        - files_parquet (set): set with paths of local parquet files # TODO: replace with BQ job ids
 
     [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-opendata-services.pdf
     [^odatav4]: https://dataportal.cbs.nl/info/ontwikkelaars
@@ -551,7 +555,7 @@ def cbsodata_to_gbq(
         file_names=file_names,
     )
 
-    return files_parquet
+    return files_parquet  # TODO: return bq job ids
 
 
 def get_urls(id: str, odata_version: str, third_party: bool = False):
