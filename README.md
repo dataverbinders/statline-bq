@@ -19,15 +19,15 @@ Poetry:
     1. Clone the repository
     2. From your local clone's root folder, run `poetry install`
 
-## Setup
+## Configuration
 
-There are two elements that need to bet setup prior to using the CLI:
+There are two elements that need to be configured prior to using the CLI:
 
-### 1. GCP (and Paths) through config.toml
+### 1. GCP and Paths through config.toml
 
-The GCP project id, bucket, and location are supplied here, allowing choices at runtime: `dev`, `test` and `prod`. Note that you must nest gcp projects setails correctly for them to be interperted, as seen below. At least one gcp project where the user holds the appropriate permissions for
+The GCP project id, bucket, and location should be given by editing `statline_bq/config.toml`, allowing uup to 3 choices at runtime: `dev`, `test` and `prod`. Note that you must nest gcp projects details correctly for them to be interperted, as seen below. You must have the proper IAM (permissions) on the GCP projects (more details below).
 
-
+Correct nesting in config file:
 ```
 [gcp]
     [gcp.prod]
@@ -45,9 +45,17 @@ The GCP project id, bucket, and location are supplied here, allowing choices at 
     bucket = "my_prod_bucket"
     location = "EU"
 ```
+Addiotionally, the local paths used by the library can configured here. Under `[paths]` define the path to the library, and other temporary folders if desired.
+
+### 2. Datasets through `datasets.toml`
+
+Provide a list of all CBS dataset ids that are to be uploaded to GCP. i.e.:
+
+`ids = ["83583NED", "83765NED", "84799NED", "84583NED", "84286NED"]`
+
 
 ## Usage
-Once the library is installed, two conifguration should be implemented:
+Once the library is installed, and configured
 
 1. 
 
