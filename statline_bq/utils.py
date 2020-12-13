@@ -601,11 +601,11 @@ def get_urls(id: str, odata_version: str, third_party: bool = False):
         - urls (dict[str]): list containing all urls of a the dataset's tables
 
     Examples:
-        ```
         >>> dataset_id = '83583NED'
         >>> urls = get_urls(id=dataset_id, odata_version='v3', third_party=False)
         >>> for name, url in urls.items():
-                print(f"{name}: {url}")
+        ...     print(f"{name}: {url}")
+        # OUTPUT
         TableInfos: https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos
         UntypedDataSet: https://opendata.cbs.nl/ODataFeed/odata/83583NED/UntypedDataSet
         TypedDataSet: https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet
@@ -614,7 +614,7 @@ def get_urls(id: str, odata_version: str, third_party: bool = False):
         BedrijfstakkenBranchesSBI2008: https://opendata.cbs.nl/ODataFeed/odata/83583NED/BedrijfstakkenBranchesSBI2008
         Bedrijfsgrootte: https://opendata.cbs.nl/ODataFeed/odata/83583NED/Bedrijfsgrootte
         Perioden: https://opendata.cbs.nl/ODataFeed/odata/83583NED/Perioden 
-        ```
+        
         
     """
     if odata_version == "v4":

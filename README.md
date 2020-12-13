@@ -73,13 +73,13 @@ Examples:
 - Running the whole process:
 
 ```
-from statline_bq.utils import cbsodata_to_gbq
+from statline_bq.utils import check_v4, cbsodata_to_gbq
 from statline_bq.config import get_config
 
-id = ["83583NED"]  # dataset id from CBS
-odata_version = "v3"  # odata version: 'v3' or 'v4'
+id = "83583NED"  # dataset id from CBS
 config = get_config("./statline_bq/config.toml")  # string path to config.toml
 
+odata_version = check_v4(id=id) # assigns 'v4' if a v4 version exists, 'v3' otherwise
 cbsodata_to_gbq(
         id=id,
         odata_version=odata_version,
