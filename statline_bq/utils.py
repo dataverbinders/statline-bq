@@ -15,9 +15,9 @@ from statline_bq.config import Config, Gcp
 from google.api_core import exceptions
 
 
-def check_gcp_type(gcp_type: str, options: List[str] = ["dev", "test", "prod"]) -> bool:
-    if gcp_type not in options:
-        raise ValueError(f"gcp_type must be one of {options}")
+def check_gcp_env(gcp_env: str, options: List[str] = ["dev", "test", "prod"]) -> bool:
+    if gcp_env not in options:
+        raise ValueError(f"gcp_env must be one of {options}")
     else:
         return True
 
@@ -375,20 +375,18 @@ def convert_table_to_parquet(
     return pq_path
 
 
-def set_gcp(config: Config, gcp_type: str) -> Gcp:
-    if gcp_type == "dev":
-        gcp = config.gcp.dev
-    elif gcp_type == "test":
-        gcp = config.gcp.test
-    elif gcp_type == "prod":
-        gcp = config.gcp.prod
-    else:
-        raise ValueError(f"gcp_type must be either 'dev', 'test' or 'prod")
-    return gcp
+def set_gcp(config: Config, gcp_env: str) -> Gcp:
+    gcp_env = gcp_env.lower()
+    config_envs = {
+        "dev": config.gcp.dev,
+        "test": config.gcp.test,
+        "prod": config.gcp.prod,
+    }
+    return config_envs[gcp_env]
 
 
 def upload_to_gcs(
-    dir: Path, source: str, odata_version: str, id: str, config: Config, gcp_type: str
+    dir: Path, source: str, odata_version: str, id: str, config: Config, gcp_env: str
 ):
     """Uploads all files in a given directory to GCS, and places each files
     with the following 'folder' structure in GCS:
@@ -414,19 +412,10 @@ def upload_to_gcs(
     Returns:
         - gcs_folder (str): the folder into which the tables have been uploaded # TODO -> Return success/ fail code?/job ID
     """
-    # Initialize Google Storage Client and get bucket according to gcp_type
-    gcp = set_gcp(config=config, gcp_type=gcp_type)
+    # Initialize Google Storage Client and get bucket according to gcp_env
+    gcp = set_gcp(config=config, gcp_env=gcp_env)
     gcs = storage.Client(project=gcp.project_id)
     gcs_bucket = gcs.get_bucket(gcp.bucket)
-    # if gcp_type == "dev":
-    #     gcs = storage.Client(project=config.gcp.dev.project_id)
-    #     gcs_bucket = gcs.get_bucket(config.gcp.dev.bucket)
-    # elif gcp_type == "test":
-    #     gcs = storage.Client(project=config.gcp.test.project_id)
-    #     gcs_bucket = gcs.get_bucket(config.gcp.test.bucket)
-    # elif gcp_type == "prod":
-    #     gcs = storage.Client(project=config.gcp.prod.project_id)
-    #     gcs_bucket = gcs.get_bucket(config.gcp.prod.bucket)
     # Set blob
     gcs_folder = (
         f"{source}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
@@ -479,7 +468,7 @@ def cbsodata_to_gbq(
     third_party: bool = False,
     source: str = "cbs",
     config: Config = None,
-    gcp_type: str = None,
+    gcp_env: str = None,
 ):
     """Load CBS dataset into Google Cloud Storage as parquet files. Then,
     create a new permanenet table in Google Big Query, linked to the dataset.
@@ -575,7 +564,7 @@ def cbsodata_to_gbq(
         odata_version=odata_version,
         id=id,
         config=config,
-        gcp_type=gcp_type,
+        gcp_env=gcp_env,
     )
 
     # Keep only names
@@ -590,7 +579,7 @@ def cbsodata_to_gbq(
         config=config,
         gcs_folder=gcs_folder,
         file_names=file_names,
-        gcp_type=gcp_type,
+        gcp_env=gcp_env,
     )
 
     return files_parquet  # TODO: return bq job ids
@@ -851,7 +840,7 @@ def gcs_to_gbq(
     config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
-    gcp_type: str = None,
+    gcp_env: str = None,
 ):  # TODO Return job id
     """Creates a dataset (if does not exist) in Google Big Query, and underneath
     creates permanent tables linked to parquet file stored in Google Storage. If
@@ -882,7 +871,7 @@ def gcs_to_gbq(
     #     for blob in storage_client.list_blobs(gcp.dev.bucket, prefix=gcs_folder)
     #     if not blob.name.endswith(".txt")
     # ]
-    gcp = set_gcp(config=config, gcp_type=gcp_type)
+    gcp = set_gcp(config=config, gcp_env=gcp_env)
     # Get description text from txt file
     description = get_description_from_gcs(
         id=id,
@@ -955,10 +944,10 @@ def main(
     source: str = "cbs",
     third_party: bool = False,
     config: Config = None,
-    gcp_type: str = "dev",
+    gcp_env: str = "dev",
 ):
-    gcp_type = gcp_type.lower()
-    if check_gcp_type(gcp_type):
+    gcp_env = gcp_env.lower()
+    if check_gcp_env(gcp_env):
         print(f"Processing dataset {id}")
         odata_version = check_v4(id=id, third_party=third_party)
         cbsodata_to_gbq(
@@ -967,7 +956,7 @@ def main(
             third_party=third_party,
             source=source,
             config=config,
-            gcp_type=gcp_type,
+            gcp_env=gcp_env,
         )
         print(
             f"Completed dataset {id}"
@@ -979,7 +968,7 @@ if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    main("83583NED", config=config, gcp_type="dev")
+    main("83583NED", config=config, gcp_env="dev")
 
 # from statline_bq.config import get_config
 
