@@ -32,13 +32,13 @@ def upload_datasets(gcp_type: str):
     datasets_path = Path("./datasets.toml")
     config = get_config(config_path)
     datasets = get_datasets(datasets_path)
-    gcp_type = gcp_type.lower()
-    if gcp_type == "dev":
-        gcp_project = config.gcp.dev
-    elif gcp_type == "test":
-        gcp_project = config.gcp.test
-    elif gcp_type == "prod":
-        gcp_project = config.gcp.prod
+    gcp_env = gcp_type.lower()
+    config_envs = {
+        "dev": config.gcp.dev,
+        "test": config.gcp.test,
+        "prod": config.gcp.prod,
+    }
+    gcp_project = config_envs.get(gcp_env)
     click.echo("The following datasets will be downloaded from CBS and uploaded into:")
     click.echo("")
     click.echo(f"Project: {gcp_project.project_id}")
@@ -48,5 +48,5 @@ def upload_datasets(gcp_type: str):
         click.echo(f"{i+1}. {dataset}")
     click.echo("")
     for id in datasets:
-        main(id=id, config=config, gcp_type=gcp_type)
+        main(id=id, config=config, gcp_env=gcp_env)
     click.echo("Finished processing datasets.")
