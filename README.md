@@ -9,7 +9,8 @@ In order to take advantage of open data, the ability to mix various datasets tog
 ## Build status
 [![Pypi Status](https://img.shields.io/pypi/v/statline-bq.svg)](https://pypi.python.org/pypi/statline-bq) [![Build Status](https://img.shields.io/travis/dkapitan/statline-bq.svg)](https://travis-ci.com/dkapitan/statline-bq) [![Docs Status](https://readthedocs.org/projects/statline-bq/badge/?version=latest)](https://dkapitan.github.io/statline-bq)
 
-## Installation
+## Installation and setup
+
 Pip:
     `pip install statline_bq` -> **NOT IMPLEMENTED YET**
 
@@ -18,8 +19,37 @@ Poetry:
     1. Clone the repository
     2. From your local clone's root folder, run `poetry install`
 
-## How to use
+## Setup
+
+There are two elements that need to bet setup prior to using the CLI:
+
+### 1. GCP (and Paths) through config.toml
+
+The GCP project id, bucket, and location are supplied here, allowing choices at runtime: `dev`, `test` and `prod`. Note that you must nest gcp projects setails correctly for them to be interperted, as seen below. At least one gcp project where the user holds the appropriate permissions for
+
+
+```
+[gcp]
+    [gcp.prod]
+    project_id = "my_dev_project_id"
+    bucket = "my_dev_bucket"
+    location = "EU"
+
+    [gcp.test]
+    project_id = "my_test_project_id"
+    bucket = "my_test_bucket"
+    location = "EU"
+
+    [gcp.prod]
+    project_id = "my_prod_project_id"
+    bucket = "my_prod_bucket"
+    location = "EU"
+```
+
+## Usage
 Once the library is installed, two conifguration should be implemented:
+
+1. 
 
 <!-- ## Screenshots
 Include logo/demo screenshot etc. -->
