@@ -1,15 +1,15 @@
 ## statline-bq
-An open source library to upload datasets from the Dutch CBS (Central Bureau of Statistics) into Google Cloud Platform. While its main use is as a helper library within the [NL Open Data](https://github.com/dataverbinders/nl-open-data) project, it can also be used as a standalone application, using its CLI. When given a list of valid dataset IDs (i.e. "83583NED") it downloads the datasets, and uploads them to Google Big Query, where the datasets can be interacted with using SQL.
+`statline-bq` is an open source library built to upload datasets from the Dutch [CBS (Central Bureau of Statistics)](https://opendata.cbs.nl/statline/#/CBS/nl/) into [Google BigQuery](https://cloud.google.com/bigquery), where they could be accessed via SQL. While intended mainly to be a helper library within the [NL Open Data](https://github.com/dataverbinders/nl-open-data) project, it can also be used as a standalone CLI application. When provided with list of valid dataset IDs (i.e. "83583NED") it downloads the datasets, and uploads them to Google Big Query, where the datasets can be interacted with using SQL.
 
 NOTE - you must have the [appropriate permissions](https://cloud.google.com/bigquery/docs/dataset-access-controls) on an existing [Google Cloud Project](https://cloud.google.com/resource-manager/docs/creating-managing-projects) prior to running statline-bq. 
 
-## Motivation
+### Motivation
 In order to take advantage of open data, the ability to mix various datasets together must be available. As of now, in order to to that, a substantial knowledge of programming and data engineering must be available to any who wishes to do so. This library, and its parent project [NL Open Data](https://github.com/dataverbinders/nl-open-data), aim to make that task easier.
 
-## Build status
+### Build status
 [![Pypi Status](https://img.shields.io/pypi/v/statline-bq.svg)](https://pypi.python.org/pypi/statline-bq) [![Build Status](https://img.shields.io/travis/dkapitan/statline-bq.svg)](https://travis-ci.com/dkapitan/statline-bq) [![Docs Status](https://readthedocs.org/projects/statline-bq/badge/?version=latest)](https://dkapitan.github.io/statline-bq)
 
-## Installation and setup
+### Installation and setup
 
 Using pip:
     `pip install statline_bq` -> **NOT IMPLEMENTED YET**
@@ -19,11 +19,11 @@ Using Poetry:
     1. Clone the repository
     2. From your local clone's root folder, run `poetry install`
 
-## Configuration
+### Configuration
 
 There are two elements that need to be configured prior to using the CLI:
 
-### 1. GCP and Paths through config.toml
+#### 1. GCP and Paths through config.toml
 
 The GCP project id, bucket, and location should be given by editing `statline_bq/config.toml`, allowing uup to 3 choices at runtime: `dev`, `test` and `prod`. Note that you must nest gcp projects details correctly for them to be interperted, as seen below. You must have the proper IAM (permissions) on the GCP projects (more details below).
 
@@ -47,25 +47,25 @@ Correct nesting in config file:
 ```
 Addiotionally, the local paths used by the library can configured here. Under `[paths]` define the path to the library, and other temporary folders if desired.
 
-### 2. Datasets through `datasets.toml`
+#### 2. Datasets through `datasets.toml`
 
 Provide a list of all CBS dataset ids that are to be uploaded to GCP. i.e.:
 
 `ids = ["83583NED", "83765NED", "84799NED", "84583NED", "84286NED"]`
 
 
-## How to use
+### Usage
 
 statline-bq can be used via a command line, or imported as a library.
 
-### CLI
+#### CLI
 Once the library is installed and configured:
 
 1. From your terminal, navigate to "my_path_to_library/statline-bq/statline_bq/"
 2. run `statline-bq`
 3. That's it!
 
-### Imported
+#### In a python script
 
 Examples:
 --------
