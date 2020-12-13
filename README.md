@@ -1,12 +1,25 @@
 ## statline-bq
-Library to upload open datasets from the Dutch CBS into Google Cloud Platform.
+An open source library to upload datasets from the Dutch CBS (Central Bureau of Statistics) into Google Cloud Platform. While its main use is as a helper library within the [NL Open Data](https://github.com/dataverbinders/nl-open-data) project, it can also be used as a standalone application, using its CLI. When given a list of valid dataset IDs (i.e. "83583NED") it downloads the datasets, and uploads them to Google Big Query, where the datasets can be interacted with using SQL.
+
+NOTE - you must have the [appropriate permissions](https://cloud.google.com/bigquery/docs/dataset-access-controls) on an existing [Google Cloud Project](https://cloud.google.com/resource-manager/docs/creating-managing-projects) prior to running statline-bq. 
 
 ## Motivation
-In order to actually take advantage of open data sets..... TBC
+In order to take advantage of open data, the ability to mix various datasets together must be available. As of now, in order to to that, a substantial knowledge of programming and data engineering must be available to any who wishes to do so. This library, and its parent project [NL Open Data](https://github.com/dataverbinders/nl-open-data), aim to make that task easier.
 
 ## Build status
-
 [![Pypi Status](https://img.shields.io/pypi/v/statline-bq.svg)](https://pypi.python.org/pypi/statline-bq) [![Build Status](https://img.shields.io/travis/dkapitan/statline-bq.svg)](https://travis-ci.com/dkapitan/statline-bq) [![Docs Status](https://readthedocs.org/projects/statline-bq/badge/?version=latest)](https://dkapitan.github.io/statline-bq)
+
+## Installation
+Pip:
+    `pip install statline_bq` -> **NOT IMPLEMENTED YET**
+
+Poetry:
+    Being a [Poetry](https://python-poetry.org/) managed package, installing via Poetry is also possible. Assuming Poetry is already installed:
+    1. Clone the repository
+    2. From your local clone's root folder, run `poetry install`
+
+## How to use
+Once the library is installed, two conifguration should be implemented:
 
 <!-- ## Screenshots
 Include logo/demo screenshot etc. -->
