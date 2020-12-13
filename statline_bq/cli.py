@@ -5,9 +5,15 @@ from pathlib import Path
 
 
 @click.command()
+@click.option(
+    "--gcp-type",
+    type=click.Choice(["dev", "test", "prod"], case_sensitive=False),
+    default="dev",
+    help='Which gcp configuration to use - can take either "dev", "test" or "prod".',
+)
 # @click.argument("config", type=click.File("r"))
 # @click.argument("dataset")
-def upload_datasets():
+def upload_datasets(gcp_type: str):
     """
     This CLI uploads datasets from CBS to Google Cloud Platform.
 
@@ -15,8 +21,9 @@ def upload_datasets():
     GCS Bucket are connected. Additionally, you must hold the proper IAM
     (permissions) settings enabled on this project.
 
-    The GCP settings, along with a list of the datasets you wish to upload
-    should be manually written into `config.toml`.
+    The GCP settings, should be manually written into "config.toml".
+
+    The datasets sould be manually written into "datasets.toml".
 
     For further information, see the documentaion "????"
     """
@@ -25,15 +32,22 @@ def upload_datasets():
     datasets_path = Path("./datasets.toml")
     config = get_config(config_path)
     datasets = get_datasets(datasets_path)
+    gcp_type = gcp_type.lower()
+    if gcp_type == "dev":
+        gcp_project = config.gcp.dev
+    elif gcp_type == "test":
+        gcp_project = config.gcp.test
+    elif gcp_type == "prod":
+        gcp_project = config.gcp.prod
     click.echo("The following datasets will be downloaded from CBS and uploaded into:")
     click.echo("")
     click.echo(
-        f"Project: {config.gcp.dev.project_id}"
+        f"Project: {gcp_project.project_id}"
     )  # TODO -> handle dev, test and prod appropriatley
-    click.echo(f"Bucket:  {config.gcp.dev.bucket}")
+    click.echo(f"Bucket:  {gcp_project.bucket}")
     click.echo("")
     for i, dataset in enumerate(datasets):
         click.echo(f"{i+1}. {dataset}")
     click.echo("")
     for id in datasets:
-        main(id=id, config=config)
+        main(id=id, config=config, gcp_type=gcp_type)
