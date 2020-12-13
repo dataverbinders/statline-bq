@@ -41,9 +41,7 @@ def upload_datasets(gcp_type: str):
         gcp_project = config.gcp.prod
     click.echo("The following datasets will be downloaded from CBS and uploaded into:")
     click.echo("")
-    click.echo(
-        f"Project: {gcp_project.project_id}"
-    )  # TODO -> handle dev, test and prod appropriatley
+    click.echo(f"Project: {gcp_project.project_id}")
     click.echo(f"Bucket:  {gcp_project.bucket}")
     click.echo("")
     for i, dataset in enumerate(datasets):
@@ -51,3 +49,4 @@ def upload_datasets(gcp_type: str):
     click.echo("")
     for id in datasets:
         main(id=id, config=config, gcp_type=gcp_type)
+    click.echo("Finished processing datasets.")
