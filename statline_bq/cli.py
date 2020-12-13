@@ -6,14 +6,14 @@ from pathlib import Path
 
 @click.command()
 @click.option(
-    "--gcp-type",
+    "--gcp-env",
     type=click.Choice(["dev", "test", "prod"], case_sensitive=False),
     default="dev",
     help='Which gcp configuration to use - can take either "dev", "test" or "prod".',
 )
 # @click.argument("config", type=click.File("r"))
 # @click.argument("dataset")
-def upload_datasets(gcp_type: str):
+def upload_datasets(gcp_env: str):
     """
     This CLI uploads datasets from CBS to Google Cloud Platform.
 
@@ -32,7 +32,7 @@ def upload_datasets(gcp_type: str):
     datasets_path = Path("./datasets.toml")
     config = get_config(config_path)
     datasets = get_datasets(datasets_path)
-    gcp_env = gcp_type.lower()
+    gcp_env = gcp_env.lower()
     config_envs = {
         "dev": config.gcp.dev,
         "test": config.gcp.test,
