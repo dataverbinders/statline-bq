@@ -386,7 +386,11 @@ def set_gcp(config: Config, gcp_env: str) -> Gcp:
 
 
 def upload_to_gcs(
-    dir: Path, source: str, odata_version: str, id: str, config: Config, gcp_env: str
+    dir: Path,
+    source: str = "cbs",
+    odata_version: str = None,
+    id: str = None,
+    config: Config = None,
 ):
     """Uploads all files in a given directory to GCS, and places each files
     with the following 'folder' structure in GCS:
@@ -919,24 +923,10 @@ def gcs_to_gbq(
         # table.description = description
 
         # Create a permanent table linked to the GCS file
-        table = client.create_table(table, exists_ok=True)  # BUG: error raised
+        table = client.create_table(
+            table, exists_ok=True
+        )  # BUG: error raised, using exists_ok=True to avoid
     return None  # TODO Return job id
-
-
-# def cbs_odata_to_gbq(
-#     id: str, source: str = "cbs", third_party: bool = False, config: Config = None,
-# ):  # TODO -> Add Paths config object):
-
-#     print(f"Processing dataset {id}")
-#     # Check if v4
-#     if check_v4(id=id, third_party=third_party) == "v4":
-#         cbsodatav4_to_gbq(id=id, source=source, third_party=third_party, config=config)
-#     else:
-#         cbsodatav3_to_gbq(id=id, source=source, third_party=third_party, config=config)
-#     print(
-#         f"Completed dataset {id}"
-#     )  # TODO - add response from google if possible (some success/failure flag)
-#     return None
 
 
 def main(

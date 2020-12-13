@@ -11,10 +11,10 @@ In order to take advantage of open data, the ability to mix various datasets tog
 
 ## Installation and setup
 
-Pip:
+Using pip:
     `pip install statline_bq` -> **NOT IMPLEMENTED YET**
 
-Poetry:
+Using Poetry:
     Being a [Poetry](https://python-poetry.org/) managed package, installing via Poetry is also possible. Assuming Poetry is already installed:
     1. Clone the repository
     2. From your local clone's root folder, run `poetry install`
@@ -54,10 +54,56 @@ Provide a list of all CBS dataset ids that are to be uploaded to GCP. i.e.:
 `ids = ["83583NED", "83765NED", "84799NED", "84583NED", "84286NED"]`
 
 
-## Usage
-Once the library is installed, and configured
+## How to use
 
-1. 
+statline-bq can be used via a command line, or imported as a library.
+
+### CLI
+Once the library is installed and configured:
+
+1. From your terminal, navigate to "my_path_to_library/statline-bq/statline_bq/"
+2. run `statline-bq`
+3. That's it!
+
+### Imported
+
+Examples:
+--------
+
+- Running the whole process:
+
+```
+from statline_bq.utils import cbsodata_to_gbq
+from statline_bq.config import get_config
+
+id = ["83583NED"]  # dataset id from CBS
+odata_version = "v3"  # odata version: 'v3' or 'v4'
+config = get_config("./statline_bq/config.toml")  # string path to config.toml
+
+cbsodata_to_gbq(
+        id=id,
+        odata_version=odata_version,
+        config=config
+    )
+```
+
+- Only uploading to GCS:
+```
+from statline_bq.utils import cbsodata_to_gbq
+from statline_bq.config import get_config
+
+id = ["83583NED"]  # dataset id from CBS
+odata_version = "v3"  # odata version: 'v3' or 'v4'
+config = get_config("./statline_bq/config.toml")  # string path to config.toml
+
+upload_dir = "some_folder/folder_to_upload_from/" # path to directory containing filed to be uploaded
+
+gcs_folder = upload_to_gcs(dir=upload_dir,
+        odata_version=odata_version, id=id, config=config)
+
+```
+
+
 
 <!-- ## Screenshots
 Include logo/demo screenshot etc. -->
