@@ -1,5 +1,5 @@
 import subprocess
-from typing import Union, Iterable
+from typing import Union, Iterable, List
 import os
 from pathlib import Path
 from glob import glob
@@ -13,6 +13,13 @@ from google.cloud import storage
 from google.cloud import bigquery
 from statline_bq.config import Config, Gcp
 from google.api_core import exceptions
+
+
+def check_gcp_type(gcp_type: str, options: List[str] = ["dev", "test", "prod"]) -> bool:
+    if gcp_type not in options:
+        raise ValueError(f"gcp_type must be one of {options}")
+    else:
+        return True
 
 
 def check_v4(id: str, third_party: bool = False) -> str:
@@ -368,7 +375,21 @@ def convert_table_to_parquet(
     return pq_path
 
 
-def upload_to_gcs(dir: Path, source: str, odata_version: str, id: str, config: Config):
+def set_gcp(config: Config, gcp_type: str) -> Gcp:
+    if gcp_type == "dev":
+        gcp = config.gcp.dev
+    elif gcp_type == "test":
+        gcp = config.gcp.test
+    elif gcp_type == "prod":
+        gcp = config.gcp.prod
+    else:
+        raise ValueError(f"gcp_type must be either 'dev', 'test' or 'prod")
+    return gcp
+
+
+def upload_to_gcs(
+    dir: Path, source: str, odata_version: str, id: str, config: Config, gcp_type: str
+):
     """Uploads all files in a given directory to GCS, and places each files
     with the following 'folder' structure in GCS:
     
@@ -393,11 +414,20 @@ def upload_to_gcs(dir: Path, source: str, odata_version: str, id: str, config: C
     Returns:
         - gcs_folder (str): the folder into which the tables have been uploaded # TODO -> Return success/ fail code?/job ID
     """
-    # Initialize Google Storage Client, get bucket, set blob
-    gcs = storage.Client(
-        project=config.gcp.dev.project_id
-    )  # TODO -> handle dev, test and prod appropriatley
-    gcs_bucket = gcs.get_bucket(config.gcp.dev.bucket)
+    # Initialize Google Storage Client and get bucket according to gcp_type
+    gcp = set_gcp(config=config, gcp_type=gcp_type)
+    gcs = storage.Client(project=gcp.project_id)
+    gcs_bucket = gcs.get_bucket(gcp.bucket)
+    # if gcp_type == "dev":
+    #     gcs = storage.Client(project=config.gcp.dev.project_id)
+    #     gcs_bucket = gcs.get_bucket(config.gcp.dev.bucket)
+    # elif gcp_type == "test":
+    #     gcs = storage.Client(project=config.gcp.test.project_id)
+    #     gcs_bucket = gcs.get_bucket(config.gcp.test.bucket)
+    # elif gcp_type == "prod":
+    #     gcs = storage.Client(project=config.gcp.prod.project_id)
+    #     gcs_bucket = gcs.get_bucket(config.gcp.prod.bucket)
+    # Set blob
     gcs_folder = (
         f"{source}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
     )
@@ -449,6 +479,7 @@ def cbsodata_to_gbq(
     third_party: bool = False,
     source: str = "cbs",
     config: Config = None,
+    gcp_type: str = None,
 ):
     """Load CBS dataset into Google Cloud Storage as parquet files. Then,
     create a new permanenet table in Google Big Query, linked to the dataset.
@@ -538,7 +569,14 @@ def cbsodata_to_gbq(
     )
 
     # Upload to GCS
-    gcs_folder = upload_to_gcs(pq_dir, source, odata_version, id, config)
+    gcs_folder = upload_to_gcs(
+        dir=pq_dir,
+        source=source,
+        odata_version=odata_version,
+        id=id,
+        config=config,
+        gcp_type=gcp_type,
+    )
 
     # Keep only names
     file_names = get_file_names(
@@ -549,10 +587,10 @@ def cbsodata_to_gbq(
         id=id,
         source=source,
         odata_version=odata_version,
-        third_party=third_party,
         config=config,
         gcs_folder=gcs_folder,
         file_names=file_names,
+        gcp_type=gcp_type,
     )
 
     return files_parquet  # TODO: return bq job ids
@@ -700,7 +738,7 @@ def create_bq_dataset(
         - existing flag indicating whether the dataset already existed when trying to create it
     """
     # Construct a BigQuery client object.
-    client = bigquery.Client(project=gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     # Set dataset_id to the ID of the dataset to create.
     dataset_id = f"{client.project}.{source}_{odata_version}_{id}"
@@ -709,7 +747,7 @@ def create_bq_dataset(
     dataset = bigquery.Dataset(dataset_id)
 
     # Specify the geographic location where the dataset should reside.
-    dataset.location = gcp.dev.location
+    dataset.location = gcp.location
 
     # Add description if provided
     dataset.description = description
@@ -738,7 +776,7 @@ def check_bq_dataset(id: str, source: str, odata_version: str, gcp: Gcp = None) 
     Returns:
         - True if exists, False if does not exists
     """
-    client = bigquery.Client(project=gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     dataset_id = f"{source}_{odata_version}_{id}"
 
@@ -766,7 +804,7 @@ def delete_bq_dataset(
         - None
     """
     # Construct a bq client
-    client = bigquery.Client(project=gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     # Set bq dataset id string
     dataset_id = f"{source}_{odata_version}_{id}"
@@ -798,8 +836,8 @@ def get_description_from_gcs(
         - gcp: config object
         - gcs_folder (str): "folder" path in gcs
     """
-    client = storage.Client(project=gcp.dev.project_id)
-    bucket = client.get_bucket(gcp.dev.bucket)
+    client = storage.Client(project=gcp.project_id)
+    bucket = client.get_bucket(gcp.bucket)
     blob = bucket.get_blob(
         f"{gcs_folder}/{source}.{odata_version}.{id}_Description.txt"
     )
@@ -810,10 +848,10 @@ def gcs_to_gbq(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
-    third_party: bool = False,
     config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
+    gcp_type: str = None,
 ):  # TODO Return job id
     """Creates a dataset (if does not exist) in Google Big Query, and underneath
     creates permanent tables linked to parquet file stored in Google Storage. If
@@ -823,7 +861,6 @@ def gcs_to_gbq(
         - id (str): table ID like `83583NED`
         - source (str): source to load data into
         - odata_version (str): 'v3' or 'v4' indicating the version
-        - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
         - gcp (Gcp): config object
         - gcs_folder (str): "folder" path in gcs
         - file_names (list): list with file names uploaded to gcs TODO: change to get file names from gcs?
@@ -845,23 +882,19 @@ def gcs_to_gbq(
     #     for blob in storage_client.list_blobs(gcp.dev.bucket, prefix=gcs_folder)
     #     if not blob.name.endswith(".txt")
     # ]
-
+    gcp = set_gcp(config=config, gcp_type=gcp_type)
     # Get description text from txt file
     description = get_description_from_gcs(
         id=id,
         source=source,
         odata_version=odata_version,
-        gcp=config.gcp,
+        gcp=gcp,
         gcs_folder=gcs_folder,
     )
 
     # Check if dataset exists and delete if it does TODO: maybe delete anyway (deleting uses not_found_ok to ignore error if does not exist)
-    if check_bq_dataset(
-        id=id, source=source, odata_version=odata_version, gcp=config.gcp
-    ):
-        delete_bq_dataset(
-            id=id, source=source, odata_version=odata_version, gcp=config.gcp
-        )
+    if check_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp):
+        delete_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp)
 
     # Create a dataset in BQ
     dataset_id = create_bq_dataset(
@@ -869,7 +902,7 @@ def gcs_to_gbq(
         source=source,
         odata_version=odata_version,
         description=description,
-        gcp=config.gcp,
+        gcp=gcp,
     )
     # if not existing:
     # Skip?
@@ -877,11 +910,11 @@ def gcs_to_gbq(
     # Handle existing dataset - delete and recreate? Repopulate? TODO
 
     # Initialize client
-    client = bigquery.Client(project=config.gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     # Configure the external data source
     # dataset_id = f"{source}_{odata_version}_{id}"
-    dataset_ref = bigquery.DatasetReference(config.gcp.dev.project_id, dataset_id)
+    dataset_ref = bigquery.DatasetReference(gcp.project_id, dataset_id)
 
     # Loop over all files related to this dataset id
     for name in file_names:
@@ -891,7 +924,7 @@ def gcs_to_gbq(
 
         external_config = bigquery.ExternalConfig("PARQUET")
         external_config.source_uris = [
-            f"https://storage.cloud.google.com/{config.gcp.dev.bucket}/{gcs_folder}/{name}"  # TODO: Handle dev/test/prod?
+            f"https://storage.cloud.google.com/{gcp.bucket}/{gcs_folder}/{name}"  # TODO: Handle dev/test/prod?
         ]
         table.external_data_configuration = external_config
         # table.description = description
@@ -918,28 +951,35 @@ def gcs_to_gbq(
 
 
 def main(
-    id: str, source: str = "cbs", third_party: bool = False, config: Config = None,
+    id: str,
+    source: str = "cbs",
+    third_party: bool = False,
+    config: Config = None,
+    gcp_type: str = "dev",
 ):
-    print(f"Processing dataset {id}")
-    odata_version = check_v4(id=id, third_party=third_party)
-    cbsodata_to_gbq(
-        id=id,
-        odata_version=odata_version,
-        third_party=third_party,
-        source=source,
-        config=config,
-    )
-    print(
-        f"Completed dataset {id}"
-    )  # TODO - add response from google if possible (some success/failure flag)
-    return None
+    gcp_type = gcp_type.lower()
+    if check_gcp_type(gcp_type):
+        print(f"Processing dataset {id}")
+        odata_version = check_v4(id=id, third_party=third_party)
+        cbsodata_to_gbq(
+            id=id,
+            odata_version=odata_version,
+            third_party=third_party,
+            source=source,
+            config=config,
+            gcp_type=gcp_type,
+        )
+        print(
+            f"Completed dataset {id}"
+        )  # TODO - add response from google if possible (some success/failure flag)
+        return None
 
 
 if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    main("83583NED", config=config)
+    main("83583NED", config=config, gcp_type="dev")
 
 # from statline_bq.config import get_config
 
