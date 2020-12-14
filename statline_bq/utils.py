@@ -1086,7 +1086,7 @@ def gcs_to_gbq(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
-    # third_party: bool = False,
+    third_party: bool = False,
     config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
@@ -1105,6 +1105,8 @@ def gcs_to_gbq(
         The source of the dataset. Currently only "cbs" is relevant.
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
+    third_party : bool, default=False
+        Flag to indicate dataset is not originally from CBS. Set to true to use dataderden.cbs.nl as base url (not available in v4 yet).
     config : Config object
         Config object holding GCP and local paths.
     gcs_folder : str
