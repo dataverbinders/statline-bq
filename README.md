@@ -16,8 +16,9 @@ Using pip:
 
 Using Poetry:
     Being a [Poetry](https://python-poetry.org/) managed package, installing via Poetry is also possible. Assuming Poetry is already installed:
-    1. Clone the repository
-    2. From your local clone's root folder, run `poetry install`
+    
+1. Clone the repository
+2. From your local clone's root folder, run `poetry install`
 
 ### Configuration
 
