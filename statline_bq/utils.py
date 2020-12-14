@@ -853,10 +853,11 @@ def create_named_dir(
     # Get paths from config object
     root = Path.home() / Path(config.paths.root)
     temp = root / Path(config.paths.temp)
+    source_dir = temp / Path(getattr(config.paths, locals()["source"]))
 
     # Create placeholders for storage
-    path = temp / Path(
-        f"{source}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+    path = source_dir / Path(
+        f"{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
     path_to_named_dir = create_dir(path)
     return path_to_named_dir

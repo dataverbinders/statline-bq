@@ -1,5 +1,4 @@
-from typing import List
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from serde import serialize, deserialize
 from serde.toml import from_toml
 from pathlib import Path
@@ -11,6 +10,19 @@ from tomlkit import parse as parse_toml
 @serialize
 @dataclass(frozen=True)
 class GcpProject:
+    """A immutable Google Cloud Platform Project Data Class, holding
+    information regarding an existing GCP Project.
+
+    Attributes
+    ----------
+    project_id: str
+        The project id
+    bucket: str
+        A bucket withing the project, where all Storage blobs are placed
+    location: str
+        The location of all Storage and BQ items
+    """
+
     project_id: str
     bucket: str
     location: str
@@ -20,6 +32,19 @@ class GcpProject:
 @serialize
 @dataclass(frozen=True)
 class Gcp:
+    """An immutable Data Class for Google Cloud Platform, holding three
+    GCPProject, one per development stage: 'dev', 'test' and 'prod'.
+
+    Attributes
+    ----------
+    dev: GcpProject
+        A GcpProject instance to be used for development.
+    test: GcpProject
+        A GcpProject instance to be used for testing.
+    prod: GcpProject
+        A GcpProject instance to be used for production.
+    """
+
     dev: GcpProject
     test: GcpProject
     prod: GcpProject
@@ -29,6 +54,38 @@ class Gcp:
 @serialize
 @dataclass(frozen=True)
 class Paths:
+    """A data class holding information regarding local paths to be used during
+    processing of datasets.
+
+    When in this library, Paths.root is always called as follows:
+
+    ```
+    from pathlib import Path
+    root = Path.home() / Path(Paths.root)
+    ```
+
+    And the rest of the folders are defined relative to it as follows:
+
+    ```
+    temp = root / Path(Paths.temp)
+    ```
+
+    Attributes
+    ----------
+    root: str
+        The path leading to the local folder of 'statline-bq'
+    temp: str
+        A folder to usewhen writing to disk temporarly
+    agb: str
+        A folder to hold all agb related data
+    vektis_open_data: str
+        A folder to hold all vektis related data
+    cbs: str
+        A folder to hold all cbs related data
+    bag: str
+        A folder to hold all bag related data
+    """
+
     root: str = None
     temp: str = None
     agb: str = None
