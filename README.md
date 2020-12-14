@@ -22,7 +22,7 @@ Using Poetry:
 
 ### Configuration
 
-There are two elements that need to be configured prior to using the CLI:
+There are two elements that need to be configured prior to using the CLI. If using as an imported library the exact usage determines wheteher these are both needed (or just one, or none)
 
 #### 1. GCP and Paths through config.toml
 

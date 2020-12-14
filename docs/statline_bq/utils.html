@@ -856,10 +856,11 @@ def create_named_dir(
     # Get paths from config object
     root = Path.home() / Path(config.paths.root)
     temp = root / Path(config.paths.temp)
+    source_dir = temp / Path(getattr(config.paths, locals()[&#34;source&#34;]))
 
     # Create placeholders for storage
-    path = temp / Path(
-        f&#34;{source}/{odata_version}/{id}/{datetime.today().date().strftime(&#39;%Y%m%d&#39;)}/parquet&#34;
+    path = source_dir / Path(
+        f&#34;{odata_version}/{id}/{datetime.today().date().strftime(&#39;%Y%m%d&#39;)}/parquet&#34;
     )
     path_to_named_dir = create_dir(path)
     return path_to_named_dir
@@ -1920,10 +1921,11 @@ PosixPath('/Users/{YOUR_USERNAME}/Projects/statline-bq/temp/cbs/v3/83583NED/2020
     # Get paths from config object
     root = Path.home() / Path(config.paths.root)
     temp = root / Path(config.paths.temp)
+    source_dir = temp / Path(getattr(config.paths, locals()[&#34;source&#34;]))
 
     # Create placeholders for storage
-    path = temp / Path(
-        f&#34;{source}/{odata_version}/{id}/{datetime.today().date().strftime(&#39;%Y%m%d&#39;)}/parquet&#34;
+    path = source_dir / Path(
+        f&#34;{odata_version}/{id}/{datetime.today().date().strftime(&#39;%Y%m%d&#39;)}/parquet&#34;
     )
     path_to_named_dir = create_dir(path)
     return path_to_named_dir</code></pre>

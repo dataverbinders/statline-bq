@@ -18,7 +18,7 @@ class GcpProject:
     project_id: str
         The project id
     bucket: str
-        A bucket withing the project, where all Storage blobs are placed
+        An existing bucket in the project, where all Storage blobs will be placed
     location: str
         The location of all Storage and BQ items
     """
@@ -54,8 +54,8 @@ class Gcp:
 @serialize
 @dataclass(frozen=True)
 class Paths:
-    """A data class holding information regarding local paths to be used during
-    processing of datasets.
+    """An immutable Data Class holding information regarding local paths to be
+    used during processing of datasets.
 
     When in this library, Paths.root is always called as follows:
 
@@ -98,21 +98,38 @@ class Paths:
 @serialize
 @dataclass(frozen=True)
 class Config:
+    """An immutable Data Class holding configuration details for the library,
+    holding one instance of Gcp and one of Paths.
+
+    Attributes
+    ----------
+    gcp: Gcp
+        Information for Gcp to use
+    paths: Paths
+        Information for local paths
+    """
+
     gcp: Gcp
     paths: Paths
 
 
 def get_config(config_file: Union[Path, str]):
-    """Parse out a toml file, and returns a frozen config class contating the
-    parsed config.toml file, leaving the Datasets information out:
-
-    Args:
-        - config_file: a Path (or string) to the config.toml file
+    """Parses a toml file, and returns a Config object.
     
-    Returns:
-        - config: a named tuple holding the following data from config.toml:
-            - config.GCP: a Gcp class holding three instances of GcpProject class (dev, test and prod)
-            - config.Paths: a  Paths class holding local paths to use during processing of data
+    Takes a path to a toml file, and parses it to instantiate and populate a
+    Config object. See README.MD for further details regarding the correct way
+    to write the toml file, or see the existing config.toml.
+
+    Parameters
+    ----------
+    config_file: Path or str
+        The location of the config.toml file
+    
+    Returns
+    -------
+    config: Config
+        A config object with relevant configuration information, including
+        GCP and paths info.
     """
     config_file = Path(config_file)
     with open(config_file, "r") as f:
@@ -121,9 +138,21 @@ def get_config(config_file: Union[Path, str]):
 
 
 def get_datasets(datasets_file: Union[Path, str]) -> tuple:
-    """Checks whether the field 'Datasets' is filled within the config file,
-    and returns a tuple of with the datasets' strings if exists, or
-    None if it does not.
+
+    """Parses a toml file and returns dataset ids as a list.
+
+    See README.MD for further details regarding the correct way
+    to write the toml file, or see the existing datasets.toml.
+
+    Parameters
+    ----------
+    datasets_file: Path or str
+        The location of the datasets.toml file
+
+    Returns
+    -------
+    tuple
+        A tuple holding all dataset ids to be processed
     """
     config_file = Path(datasets_file)
     with open(config_file, "r") as f:
