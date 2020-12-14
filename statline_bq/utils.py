@@ -54,7 +54,7 @@ def create_dir(path: Path) -> Path:
         - path (Path): path to check
 
     Returns:
-        - Path: new directory
+        - path (Path): new/existing directory
     """
     try:
         path = Path(path)
@@ -72,14 +72,26 @@ def get_dataset_description(urls: dict, odata_version: str) -> str:
     'v3' or 'v4'.
 
     Args:
-        - urls (dict): dictionary holding all urls of the dataset from CBS.
-        urls["Properties"] (for v4) or urls["TableInfos"] (for v3) must be
+        - urls (dict): dictionary holding urls of the dataset from CBS.
+        NOTE: urls["Properties"] (for v4) or urls["TableInfos"] (for v3) must be
         present in order to access the dataset description.
         - odata_version (str): version of the odata for this dataset - must
         be either 'v3' or 'v4.
 
     Returns:
         - description (str): string with the description of the dataset from CBS.
+
+    Examples:
+
+        >>> from statline_bq.utils import get_dataset_description
+        >>> urls = {
+        ...         "TableInfos": "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos",  
+        ...         "UntypedDataSet": "https://opendata.cbs.nl/ODataFeed/odata/83583NED/UntypedDataSet"
+        ...         }
+        >>> odata_version = "v3"
+        >>> description_text = get_dataset_description(urls, odata_version=odata_version)
+        >>> description_text
+
     """
     if odata_version.lower() == "v4":
         description = get_dataset_description_v4(urls["Properties"])
