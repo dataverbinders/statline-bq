@@ -862,16 +862,34 @@ def create_named_dir(
     return path_to_named_dir
 
 
-# TODO PLACEMARK DOCUMENTATION
 def tables_to_parquet(
     id: str,
     urls: dict,
     odata_version: str,
     source: str = "cbs",
     pq_dir: Union[Path, str] = None,
-):
-    """Download datasets from CBS and converting to Parquet
+) -> set:
+    """Downloads all tables related to a valid CBS dataset id, and stores them locally as Parquet files.
+
+    Parameters
+    ----------
+    id : str
+        CBS Dataset id, i.e. "83583NED"
+    urls : dict
+        Dictionary holding urls of all dataset tables from CBS
+    odata_version : str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    source : str, default='cbs
+        The source of the dataset. Currently only "cbs" is relevant.
+    pq_dir : Path or str
+        The directory where the putput Parquet files are stored.
+
+    Returns
+    -------
+    files_parquet: set of Path
+        A set containing Path objects of all output Parquet files
     """
+
     # Create placeholders for storage
     files_parquet = set()
 
@@ -910,22 +928,32 @@ def tables_to_parquet(
 
 
 def create_bq_dataset(
-    id: str, source: str, odata_version: str, description: str = None, gcp: Gcp = None,
+    id: str,
+    source: str = "cbs",
+    odata_version: str = None,
+    description: str = None,
+    gcp: Gcp = None,
 ) -> str:
-    """Creates a dataset in Google Big Query. If dataset exists already exists,
-    does nothing.
+    """Creates a dataset in Google Big Query. If dataset exists already exists, does nothing.
 
-    Parameters:
-        - id (str): string to be used as the dataset id
-        - source (str): source to load data into
-        - odata_version (str): "v3" or "v4" indicating the version
-        - description (str): description for the dataset
-        - gcp (Gcp): config object
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    description: str
+        The description of the dataset
+    gcp: Gcp
+        A Gcp Class object, holding GCP parameters
 
     Returns:
-        - string with the dataset id
-        - existing flag indicating whether the dataset already existed when trying to create it
+    dataset.dataset_id: str
+        The id of the created BQ dataset
     """
+
     # Construct a BigQuery client object.
     client = bigquery.Client(project=gcp.project_id)
 
@@ -983,15 +1011,22 @@ def delete_bq_dataset(
 ) -> None:
     """Delete an exisiting dataset from Google Big Query
 
-    Parameters:
-        - id (str): the dataset id, i.e. '83583NED'
-        - source (str): source to load data into
-        - odata_version (str): "v3" or "v4" indicating the version
-        - gcp (Gcp): a config object
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    gcp: Gcp
+        A Gcp Class object, holding GCP parameters
 
-        Returns:
-        - None
+    Returns
+    -------
+    None
     """
+
     # Construct a bq client
     client = bigquery.Client(project=gcp.project_id)
 
@@ -1011,19 +1046,33 @@ def get_description_from_gcs(
     gcp: Gcp = None,
     gcs_folder: str = None,
 ) -> str:
-    """Gets previsouly uploaded dataset description from GCS. The description
-    should exist in the following file, under the following structure:
+    """Gets previsouly uploaded dataset description from GCS.
 
-        - {project}/{bucket}/{source}/{odata_version}/{id}/{YYYYMMDD}/{source}.{odata_version}.{id}_Description
-        For example:
-        - dataverbinders-dev/cbs/v4/83765NED/20201127/cbs.v4.83765NED_Description.txt
+    The description should exist in the following file, under the following structure:
 
-    Parameters:
-        - id (str): table ID like `83583NED`
-        - source (str): source to load data into
-        - odata_version (str): "v3" or "v4" indicating the version
-        - gcp: config object
-        - gcs_folder (str): "folder" path in gcs
+        "{project}/{bucket}/{source}/{odata_version}/{id}/{YYYYMMDD}/{source}.{odata_version}.{id}_Description"
+
+    For example:
+
+        "dataverbinders-dev/cbs/v4/83765NED/20201127/cbs.v4.83765NED_Description.txt"
+
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    gcp: Gcp
+        A Gcp Class object, holding GCP parameters
+    gcs_folder : str
+        The GCS folder holding the description txt file
+
+    Returns
+    -------
+    str
+        [description]
     """
     client = storage.Client(project=gcp.project_id)
     bucket = client.get_bucket(gcp.bucket)
@@ -1037,27 +1086,39 @@ def gcs_to_gbq(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
+    # third_party: bool = False,
     config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
-    gcp_env: str = None,
-):  # TODO Return job id
-    """Creates a dataset (if does not exist) in Google Big Query, and underneath
-    creates permanent tables linked to parquet file stored in Google Storage. If
-    dataset exists, removes it and recreates it with most up to date uploaded files (?) # TODO: Is this the best logic?
+):
+    """Creates a BQ dataset and links all relevant tables from GCS underneath.
+    
+    Creates a dataset (if does not exist) in Google Big Query, and underneath
+    creates permanent tables linked to parquet file stored in Google Storage.
+    If dataset exists, removes it and recreates it with most up to date uploaded files (?) # TODO: Is this the best logic?
+    
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    config : Config object
+        Config object holding GCP and local paths.
+    gcs_folder : str
+        The GCS folder holding the description txt file.
+    file_names : list
+        A list holding all file names of tables to be linked.
 
-    Parameters:
-        - id (str): table ID like `83583NED`
-        - source (str): source to load data into
-        - odata_version (str): "v3" or "v4" indicating the version
-        - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
-        - gcp (Gcp): config object
-        - gcs_folder (str): "folder" path in gcs
-        - file_names (list): list with file names uploaded to gcs TODO: change to get file names from gcs?
 
-    Returns:
-        - TODO
+    Returns
+    -------
+    # TODO Return job id
+        [description]
     """
+
     # # Get all parquet files in gcs folder from GCS
     # storage_client = storage.Client(project=gcp.dev.project_id)
 
