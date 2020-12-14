@@ -54,6 +54,7 @@ Provide a list of all CBS dataset ids that are to be uploaded to GCP. i.e.:
 
 `ids = ["83583NED", "83765NED", "84799NED", "84583NED", "84286NED"]`
 
+This should be given by directly editing `statline_bq/datasets.toml`
 
 ### Usage
 
