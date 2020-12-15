@@ -1,5 +1,5 @@
 import subprocess
-from typing import Union, Iterable
+from typing import Union, Iterable, List
 from os import remove, listdir, rmdir, PathLike
 from pathlib import Path
 from glob import glob
