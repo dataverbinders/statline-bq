@@ -59,6 +59,7 @@ def check_v4(id: str, third_party: bool = False) -> str:
         "v4" if exists as odata v4, "v3" otherwise.
     """
 
+    print("DEFINITELY LOCAL VERSION!")
     base_url = {
         True: None,  # currently no IV3 links in ODATA V4,
         False: f"https://odata4.cbs.nl/CBS/{id}",
@@ -288,7 +289,7 @@ def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=
     return bag
 
 
-def get_odata(target_url: str, odata_version: str):
+def get_odata(target_url: str, odata_version: str) -> db:
     """Gets a table from a valid CBS url and returns it as a Dask bag.
 
     A wrapper, calling the appropriate version function to get the table from
@@ -320,7 +321,7 @@ def get_odata(target_url: str, odata_version: str):
         raise ValueError("odata version must be either 'v3' or 'v4'")
 
 
-def get_odata_v3(target_url: str):
+def get_odata_v3(target_url: str) -> db:
     """Gets a table from a valid url for CBS dataset with Odata v3.
 
     This function uses standard requests.get() to retrieve data at target_url
@@ -377,9 +378,7 @@ def get_odata_v3(target_url: str):
     return bag
 
 
-def get_odata_v4(
-    target_url: str,
-):  # TODO -> How to define Bag for type hinting? (maybe here: https://docs.python.org/3/library/typing.html#newtype)
+def get_odata_v4(target_url: str,) -> db:
     """Gets a table from a specific url for CBS Odata v4.
     This function uses standard requests.get() to retrieve data at target_url
     in json format, and concats it all into a Dask Bag to handle memory
@@ -517,7 +516,7 @@ def upload_to_gcs(
     id: str = None,
     config: Config = None,
     gcp_env: str = "dev",
-):
+) -> str:  # TODO change the return value to some indication or id from Google?:
     """Uploads all files in a given directory to Google Cloud Storage.
 
     This function is meant to be used for uploading all tables of a certain dataset retrieved from
@@ -612,7 +611,7 @@ def cbsodata_to_gbq(
     source: str = "cbs",
     config: Config = None,
     gcp_env: str = None,
-):
+) -> set:  # TODO change return value
     """Loads a CBS dataset as a dataset in Google BigQuery.
 
     Retrieves a given dataset id from CBS, and converts it locally to Parquet. The
@@ -766,7 +765,7 @@ def cbsodata_to_gbq(
     return files_parquet  # TODO: return bq job ids
 
 
-def get_urls(id: str, odata_version: str, third_party: bool = False):
+def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
     """Returns a dict with urls of all dataset tables given a valid CBS dataset id.
 
     Parameters
@@ -825,7 +824,7 @@ def get_urls(id: str, odata_version: str, third_party: bool = False):
 
 def create_named_dir(
     id: str, odata_version: str, source: str = "cbs", config: Config = None
-):
+) -> Path:
     """Creates a directory according to a specific structure.
 
     A convenience function, creatind a directory according to the following
@@ -1111,7 +1110,7 @@ def gcs_to_gbq(
     gcs_folder: str = None,
     file_names: list = None,
     gcp_env: str = None,
-):
+) -> None:  # TODO Return job id
     """Creates a BQ dataset and links all relevant tables from GCS underneath.
     
     Creates a dataset (if does not exist) in Google Big Query, and underneath
@@ -1216,7 +1215,7 @@ def main(
     third_party: bool = False,
     config: Config = None,
     gcp_env: str = "dev",
-):
+) -> None:
     gcp_env = gcp_env.lower()
     if check_gcp_env(gcp_env):
         print(f"Processing dataset {id}")
