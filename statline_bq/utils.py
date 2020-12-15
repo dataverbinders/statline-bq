@@ -1,6 +1,6 @@
 import subprocess
 from typing import Union, Iterable, List
-import os
+from os import remove, listdir, rmdir, PathLike
 from pathlib import Path
 from glob import glob
 import requests
@@ -16,6 +16,25 @@ from google.api_core import exceptions
 
 
 def check_gcp_env(gcp_env: str, options: List[str] = ["dev", "test", "prod"]) -> bool:
+    """Check that gcp_env is one of the permitted options
+
+    Parameters
+    ----------
+    gcp_env : str
+        variable to check
+    options : List[str], default=["dev", "test", "prod"]
+        list of permittable options
+
+    Returns
+    -------
+    bool
+        True if gcp_env is one of options
+
+    Raises
+    ------
+    ValueError
+        If gcp_env is not one of options
+    """
     if gcp_env not in options:
         raise ValueError(f"gcp_env must be one of {options}")
     else:
@@ -23,16 +42,23 @@ def check_gcp_env(gcp_env: str, options: List[str] = ["dev", "test", "prod"]) ->
 
 
 def check_v4(id: str, third_party: bool = False) -> str:
-    """
-    Check whether a certain CBS table exists as odata v4.
+    """Checks whether a certain CBS table exists as OData Version "v4".
 
-    Args:
-        - id (str): table ID like `83583NED`
-        - third_party (boolean): 'odata4.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl (not available in v4 yet)        
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED"
 
-    Returns:
-        - odata_version (str): 'v4' if exists as odata v4, 'v3' otherwise.
+    third_party: bool, default=False
+        Flag to indicate dataset is not originally from CBS. Set to true
+        to use dataderden.cbs.nl as base url (not available in v4 yet).
+
+    Returns
+    -------
+    odata_version: str
+        "v4" if exists as odata v4, "v3" otherwise.
     """
+
     base_url = {
         True: None,  # currently no IV3 links in ODATA V4,
         False: f"https://odata4.cbs.nl/CBS/{id}",
@@ -48,14 +74,19 @@ def check_v4(id: str, third_party: bool = False) -> str:
 
 
 def create_dir(path: Path) -> Path:
-    """Checks whether path exists and is a directory, and creates it if not.
+    """Checks whether a path exists and is a directory, and creates it if not.
 
-    Args:
-        - path (Path): path to check
+    Parameters
+    ----------
+    path: Path
+        A path to the directory.
 
-    Returns:
-        - Path: new directory
+    Returns
+    -------
+    path: Path
+        The same input path, to new or existing directory.
     """
+
     try:
         path = Path(path)
         if not (path.exists() and path.is_dir()):
@@ -67,20 +98,39 @@ def create_dir(path: Path) -> Path:
 
 
 def get_dataset_description(urls: dict, odata_version: str) -> str:
-    """Wrapper function to call the correct version function which in
-    turn gets the dataset description according to the odata version: 
-    'v3' or 'v4'.
+    """Gets a CBS dataset description text.
+    
+    Wrapper function to call the correct version function which in turn gets
+    the dataset description according to the odata version: "v3" or "v4".
 
-    Args:
-        - urls (dict): dictionary holding all urls of the dataset from CBS.
-        urls["Properties"] (for v4) or urls["TableInfos"] (for v3) must be
-        present in order to access the dataset description.
-        - odata_version (str): version of the odata for this dataset - must
-        be either 'v3' or 'v4.
+    Parameters
+    ----------
+    urls: dict
+        Dictionary holding urls of the dataset from CBS.
+        NOTE: urls["Properties"] (for v4) or urls["TableInfos"] (for v3)
+        must be present in order to access the dataset description.
 
-    Returns:
-        - description (str): string with the description of the dataset from CBS.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+
+    Returns
+    -------
+    description: str
+        The description of the dataset from CBS.
+
+    Examples
+    --------
+    >>> from statline_bq.utils import get_dataset_description
+    >>> urls = {
+    ...         "TableInfos": "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos",  
+    ...         "UntypedDataSet": "https://opendata.cbs.nl/ODataFeed/odata/83583NED/UntypedDataSet"
+    ...         }
+    >>> odata_version = "v3"
+    >>> description_text = get_dataset_description(urls, odata_version=odata_version)
+    >>> description_text
+    #Text describing the dataset will print
     """
+
     if odata_version.lower() == "v4":
         description = get_dataset_description_v4(urls["Properties"])
     elif odata_version.lower() == "v3":
@@ -91,15 +141,22 @@ def get_dataset_description(urls: dict, odata_version: str) -> str:
 
 
 def get_dataset_description_v3(url_table_infos: str) -> str:
-    """Gets the description of a v3 odata dataset from CBS
-    provided in url_table_infos.
+    """Gets the description of a v3 odata dataset from CBS provided in url_table_infos.
 
-    Args:
-        - url_table_infos (str): url of TableInfos table as string.
+    Usually wrapped in `get_dataset_description()`, and it is better practice
+    to call it wrapped to allow for both "v3" and "v4" functionality.
 
-    Returns:
-        - description (str): a string with the dataset's description
+    Parameters
+    ----------
+    url_table_infos: str
+        The url for a dataset's "TableInfos" table as string.
+
+    Returns
+    -------
+    description: str
+        A string with the dataset's description
     """
+
     # Get JSON format of data set.
     url_table_infos = "?".join((url_table_infos, "$format=json"))
 
@@ -116,12 +173,20 @@ def get_dataset_description_v3(url_table_infos: str) -> str:
 def get_dataset_description_v4(url_table_properties: str) -> str:
     """Gets table description of a table in CBS odata V4.
 
-    Args:
-        - url_table_properties (str): url of the data set `Properties`
+    Usually wrapped in `get_dataset_description()`, and it is better practice
+    to call it wrapped to allow for both "v3" and "v4" functionality.
 
-    Returns:
-        - description (str): a string with the dataset's description
+    Parameters
+    ----------
+    url_table_properties: str
+        The url for a dataset's "Properties" table as string.
+
+    Returns
+    -------
+    description: str
+        A string with the dataset's description
     """
+
     r = requests.get(url_table_properties).json()
     return r["Description"]
 
@@ -133,7 +198,9 @@ def write_description_to_file(
     source: str = "cbs",
     odata_version: str = None,
 ) -> Path:
-    """Writes a dataset description string into a txt file and places that
+    """Writes a string into a text file at a given location.
+
+    Writes a dataset description string into a txt file and places that
     file in a directory alongside the rest of that dataset's tables (assuming
     it, and they exist). The file is named according to the same conventions
     used for the tables, and placed in the directory accordingly, namely:
@@ -144,16 +211,25 @@ def write_description_to_file(
 
         "cbs.v3.83583NED_Description.txt"
 
-    Args:
-        - id (str): dataset id
-        - description_text (str): string with text to be written into the file.
-        - pq_dir (Path, str): path to directory where the file will be stored.
-        - source (str): the source of the dataset (default = "cbs")
-        - odata_version (str) version of dataset's odata - intended to be 'v3' or 'v4'
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED"
+    description_text: str
+        The dataset description text to be written into the file.
+    pq_dir: Path or str
+        Path to directory where the file will be stored.
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        The version of the OData for this dataset - should be "v3" or "v4".
 
-    Returns:
-        - description_file (Path): path object to text file
+    Returns
+    -------
+    description_file: Path
+        A path of the output txt file
     """
+
     description_file = Path(pq_dir) / Path(
         f"{source}.{odata_version}.{id}_Description.txt"
     )
@@ -166,14 +242,19 @@ def write_description_to_file(
 def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=100000 ath the end - returns same data as first link
     target_url: str,
 ):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
-    """Gets a table from a specific url for CBS Odata v4.
+    """Retrieves a table from a specific url for CBS Odata v4.
 
-    Args:
-        - url_table_properties (str): url of the table
+    Parameters
+    ----------
+    url_table_properties: str
+        The url of the desired table
 
-    Returns:
-        - data (Dask bag): all data received from target url as json type, in a Dask bag
+    Returns
+    -------
+    data: Dask bag
+        All data received from target url as json type, in a Dask bag
     """
+
     # First call target url and get json formatted response as dict
     temp_file = "odata.json"
     # r = requests.get(target_url).json()
@@ -207,9 +288,30 @@ def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=
     return bag
 
 
-def get_odata(target_url: str, odata_version: str):
-    """Hands over the url to the appropriate version function
+def get_odata(target_url: str, odata_version: str) -> db:
+    """Gets a table from a valid CBS url and returns it as a Dask bag.
+
+    A wrapper, calling the appropriate version function to get the table from
+    a valid CBS url, leading to a table in OData format.
+
+    Parameters
+    ----------
+    target_url : str
+        A url to the table
+    odata_version : str
+        version of the odata for this dataset - must be either "v3" or "v4".
+
+    Returns
+    -------
+    Dask Bag
+        All data received from target url as json type, concatenated in a Dask Bag
+
+    Raises
+    ------
+    ValueError
+        If 'odata_version` is not one of {"v3", "v4"}
     """
+
     if odata_version == "v4":
         return get_odata_v4(target_url)
     elif odata_version == "v3":
@@ -218,10 +320,9 @@ def get_odata(target_url: str, odata_version: str):
         raise ValueError("odata version must be either 'v3' or 'v4'")
 
 
-def get_odata_v3(
-    target_url: str,
-):  # TODO -> How to define Bag for type hinting? (maybe here: https://docs.python.org/3/library/typing.html#newtype)
-    """Gets a table from a specific url for CBS Odata v3.
+def get_odata_v3(target_url: str) -> db:
+    """Gets a table from a valid url for CBS dataset with Odata v3.
+
     This function uses standard requests.get() to retrieve data at target_url
     in json format, and concats it all into a Dask Bag to handle memory
     overflow if needed.
@@ -230,13 +331,20 @@ def get_odata_v3(
     the key "odata.nextLink" exists in the response with the link to the next
     10,000 (or less) rows.
 
-    Args:
-        - target_url (str): url of the table
+    Meant to be wrapped by `get_odata()`, and it is better practice to call it
+    wrapped to allow for both "v3" and "v4" functionality.
 
-    Returns:
-        - data (Dask bag): all data received from target url as json type,
-        concatenated in a Dask bag
+    Parameters
+    ----------
+    target_url: str
+        A valid url of a table from CBS
+
+    Returns
+    -------
+    bag: Dask Bag
+        All data received from target url as json type, concatenated as a Dask bag
     """
+
     print(f"Fetching from {target_url}")
     # First call target url and get json formatted response as dict
     r = requests.get(target_url).json()
@@ -269,9 +377,7 @@ def get_odata_v3(
     return bag
 
 
-def get_odata_v4(
-    target_url: str,
-):  # TODO -> How to define Bag for type hinting? (maybe here: https://docs.python.org/3/library/typing.html#newtype)
+def get_odata_v4(target_url: str,) -> db:
     """Gets a table from a specific url for CBS Odata v4.
     This function uses standard requests.get() to retrieve data at target_url
     in json format, and concats it all into a Dask Bag to handle memory
@@ -281,12 +387,20 @@ def get_odata_v4(
     the key "@odata.nextLink" exists in the response with the link to the next
     10,000 (or less) rows.
 
-    Args:
-        - target_url (str): url of the table
+    Meant to be wrapped by `get_odata()`, and it is better practice to call it
+    wrapped to allow for both "v3" and "v4" functionality.
 
-    Returns:
-        - data (Dask bag): all data received from target url as json type, in a Dask bag
+    Parameters
+    ----------
+    target_url: str
+        A valid url of a table from CBS
+
+    Returns
+    -------
+    bag: Dask Bag
+        All data received from target url as json type, concatenated as a Dask bag
     """
+
     print(f"Fetching from {target_url}")
     # First call target url and get json formatted response as dict
     r = requests.get(target_url).json()
@@ -316,23 +430,32 @@ def get_odata_v4(
 def convert_table_to_parquet(
     bag, file_name: str, out_dir: Union[str, Path]
 ) -> Path:  # (TODO -> IS THERE A FASTER/BETTER WAY??)
-    """Converts a dask bag holding data from a CBS table to Parquet form
+    """Converts a Dask Bag to Parquet files and stores them on disk.
+
+    Converts a dask bag holding data from a CBS table to Parquet form
     and stores it on disk. The bag should be filled by dicts (can be nested)
     which can be serialized as json.
 
     The current implementation iterates over each bag partition and dumps
-    it into a json file, then appends all file into a single json file. That json
-    file is then read into a PyArrow table, and finally that table is written as
-    a parquet file to disk.
+    it into a json file, then appends all file into a single json file. That
+    json file is then read into a PyArrow table, and finally that table is
+    written as a parquet file to disk.
 
-    Args:
-        - bag: a Dask bag holding (possibly nested) dicts that can serialized as json
-        - file_name (str): name of the file to store on disl
-        - out_dir (str, Path): path to directory to store file
-    
-    Returns:
-        - pq_path (Path): path to output parquet file
+    Parameters
+    ----------
+    bag: Dask Bag
+        A Bag holding (possibly nested) dicts that can serialized as json
+    file_name: str)
+        The name of the file to store on disk
+    out_dir: str or Path
+        A path to the directory where the file is stored
+
+    Returns
+    -------
+    pq_path: Path
+        The path to the output parquet file
     """
+
     # create directories to store files
     out_dir = Path(out_dir)
     temp_json_dir = Path("./temp/json")
@@ -353,7 +476,7 @@ def convert_table_to_parquet(
         for fn in filenames:
             with open(fn) as f:
                 json_file.write(f.read())
-            os.remove(fn)
+            remove(fn)
 
     # # Works without converting to ndjson - might be needed in a different implementation?
     # # Convert to ndjson format
@@ -368,10 +491,10 @@ def convert_table_to_parquet(
     pq.write_table(pa_table, pq_path)
 
     # Remove temp ndjson file
-    os.remove(json_path)
+    remove(json_path)
     # Remove temp folder if empty  #TODO -> inefficiently(?) creates and removes the folder each time the function is called
-    if not os.listdir(temp_json_dir):
-        os.rmdir(temp_json_dir)
+    if not listdir(temp_json_dir):
+        rmdir(temp_json_dir)
     return pq_path
 
 
@@ -386,31 +509,47 @@ def set_gcp(config: Config, gcp_env: str) -> Gcp:
 
 
 def upload_to_gcs(
-    dir: Path, source: str, odata_version: str, id: str, config: Config, gcp_env: str
-):
-    """Uploads all files in a given directory to GCS, and places each files
-    with the following 'folder' structure in GCS:
-    
-        - '{project_name}/{bucket_name}/{source}/{odata_version}/{id}/{YYYYMMDD}/{filename}'
-    
-    Meant to be used for uploading all tables of a certain dataset retrieved
-    from CBS API, and hence to upload (for example) into:
-        
-        - 'dataverbinders/dataverbinders/cbs/v4/83765NED/20201104/
-    
-    the following tables:
-        - cbs.82807NED_Observations.parquet
-        - cbs.82807NED_PeriodenCodes.parquet
-        - etc...
-    
-    Args:
-        - dir (Path): A Path object to a directory containing files to be uploaded
-        - source (str): source to load data into
-        - odata_version (str): 'v4' or 'v3', stating the version of the original odata retrieved
-        - id (str): table ID like `83583NED`
+    dir: Path,
+    source: str = "cbs",
+    odata_version: str = None,
+    id: str = None,
+    config: Config = None,
+    gcp_env: str = None,
+) -> str:  # TODO change the return value to some indication or id from Google?:
+    """Uploads all files in a given directory to Google Cloud Storage.
 
-    Returns:
-        - gcs_folder (str): the folder into which the tables have been uploaded # TODO -> Return success/ fail code?/job ID
+    This function is meant to be used for uploading all tables of a certain dataset retrieved from
+    the CBS API. It therefore uses the following naming structure as the GCS blobs:
+
+        "{project_name}/{bucket_name}/{source}/{odata_version}/{id}/{YYYYMMDD}/{filename}"
+
+    For example, dataset "82807NED", uploaded on Novemeber 11, 2020, to the "dataverbinders" project,
+    using "dataverbinders" as a bucket, would create the following:
+
+    - "dataverbinders/dataverbinders/cbs/v4/83765NED/20201104/cbs.82807NED_Observations.parquet"
+    - "dataverbinders/dataverbinders/cbs/v4/83765NED/20201104/cbs.82807NED_PeriodenCodes.parquet"
+    - etc..
+
+    Parameters
+    ----------
+    dir: Path
+        A Path object to a directory containing files to be uploaded
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    id: str
+        CBS Dataset id, i.e. "83583NED"
+    config: Config
+        Config object holding GCP and local paths
+    gcp_env: str
+        determines which GCP configuration to use from config.gcp
+
+
+    Returns
+    -------
+    gcs_folder: str
+        The folder (=blob) into which the tables have been uploaded # TODO -> Return success/ fail code?/job ID
     """
     # Initialize Google Storage Client and get bucket according to gcp_env
     gcp = set_gcp(config=config, gcp_env=gcp_env)
@@ -421,7 +560,7 @@ def upload_to_gcs(
         f"{source}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}"
     )
     # Upload file
-    for pfile in os.listdir(dir):
+    for pfile in listdir(dir):
         gcs_blob = gcs_bucket.blob(gcs_folder + "/" + pfile)
         gcs_blob.upload_from_filename(
             dir / pfile
@@ -430,35 +569,37 @@ def upload_to_gcs(
     return gcs_folder  # TODO: return job id, if possible
 
 
-def get_file_names(paths: Iterable[Path]) -> list:
-    """ Gets an iterable with Path objects, and returns an iterable with the
-    file names only.
+def get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
+    """Gets the filenames from an iterable of Path-like objects
 
-    Example:
-    ```
-        >>> from pathlib import Path
+    Parameters
+    ----------
+    paths: iterable of strings or path-like objects
+        An iterable holding path-strings or path-like objects
 
-        >>> path1 = Path('some_folder/other_folder/some_file.txt')
-        >>> path2 = Path('some_folder/different_folder/another_file.png')
-        >>> full_paths = [path1, path2]
+    Returns
+    -------
+    file_names: list of str
+        A list holding the extracted file names
 
-        >>> file_names = get_file_names(full_paths)
+    Example
+    -------
+    >>> from pathlib import Path
 
-        >>> for name in file_names:
-                print(name)
-        
-        some_file.txt
-        another_file.png
-    ```
-    
+    >>> path1 = Path('some_folder/other_folder/some_file.txt')
+    >>> path2 = 'some_folder/different_folder/another_file.png'
+    >>> full_paths = [path1, path2]
 
-    Args:
-        - paths (list-like[Path]): an iterable of Path objects
+    >>> file_names = get_file_names(full_paths)
 
-    Returns:
-        - file_names (list[str]): a list holding all file names with their extension
+    >>> for name in file_names:
+            print(name)
+    some_file.txt
+    another_file.png
     """
-    file_names = [Path(path.name) for path in paths]
+
+    paths = [Path(path) for path in paths]
+    file_names = [path.name for path in paths]
     return file_names
 
 
@@ -469,73 +610,113 @@ def cbsodata_to_gbq(
     source: str = "cbs",
     config: Config = None,
     gcp_env: str = None,
-):
-    """Load CBS dataset into Google Cloud Storage as parquet files. Then,
-    create a new permanenet table in Google Big Query, linked to the dataset.
+) -> set:  # TODO change return value
+    """Loads a CBS dataset as a dataset in Google BigQuery.
 
+    Retrieves a given dataset id from CBS, and converts it locally to Parquet. The
+    Parquet files are uploaded to Google Cloud Storage, and a dataset is created
+    in Google BigQuery, under which each permanenet tables are nested,linked to the
+    Parquet files - each being a table of the dataset.
+
+    Parameters
+    ---------
+    id: str
+        CBS Dataset id, i.e. "83583NED"
+
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+
+    third_party: bool, default=False
+        Flag to indicate dataset is not originally from CBS. Set to true
+        to use dataderden.cbs.nl as base url (not available in v4 yet).
+
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+
+    config: Config object
+        Config object holding GCP and local paths
+
+    Returns
+    -------
+    files_parquet: set of Paths
+        A set with paths of local parquet files # TODO: replace with BQ job ids
+
+    Example
+    -------
+    >>> from statline_bq.utils import check_v4, cbsodata_to_gbq
+    >>> from statline_bq.config import get_config
+    >>> id = "83583NED"
+    >>> config = get_config("path/to/config.file")
+    >>> print(f"Processing dataset {id}")
+    >>> odata_version = check_v4(id=id)
+    >>> cbsodata_to_gbq(
+    ... id=id,
+    ... odata_version=odata_version,
+    ... config=config
+    ... )
+    >>> print(f"Completed dataset {id}")
+    Processing dataset 83583NED
+    # More messages from depending on internal process
+    Completed dataset 83583NED
+
+    Notes
+    -----
     In **GCS**, the following "folders" and filenames structure is used:
 
-    - {project_name}/{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet
+        "{project_name}/{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet"
 
     for example:
 
-    - dataverbinders/dataverbinders/cbs/v3/84286NED/20201125/cbs.v3.84286NED_TypedDataSet.parquet
+        "dataverbinders/dataverbinders/cbs/v3/84286NED/20201125/cbs.v3.84286NED_TypedDataSet.parquet"
     _________
     In **BQ**, the following structure and table names are used:
 
-    - [project/]/{source}_{version}_{dataset_id}/{dataset_id}/{table_name}
+        "[project/]/{source}_{version}_{dataset_id}/{dataset_id}/{table_name}"
 
     for example:
 
-    - [dataverbinders/]/cbs_v3_83765NED/83765NED_Observations
-    _________
+        "[dataverbinders/]/cbs_v3_83765NED/83765NED_Observations"
+
     Odata version 3
     ---------------
 
-    For given dataset id, following tables are uploaded into GCS and linked in
+    For given dataset id, the following tables are uploaded into GCS and linked in
     GBQ (taking `cbs` as default and `83583NED` as example):
 
-    - cbs.v3.83583NED_DataProperties: Description of topics and dimensions contained in table
-    - cbs.v3.83583NED_DimensionName: Separate dimension tables
-    - cbs.v3.83583NED_TypedDataSet: The TypedDataset (main table)
-    - cbs.v3.83583NED_CategoryGroups: Grouping of dimensions
-    
+    - "cbs.v3.83583NED_DataProperties" - Description of topics and dimensions contained in table
+    - "cbs.v3.83583NED_{DimensionName}" - Separate dimension tables
+    - "cbs.v3.83583NED_TypedDataSet" - The TypedDataset (***main table***)
+    - "cbs.v3.83583NED_CategoryGroups" - Grouping of dimensions
+
     See *Handleiding CBS Open Data Services (v3)*[^odatav3] for details.
-    _________
+
     Odata Version 4
     ---------------
 
     For a given dataset id, the following tables are ALWAYS uploaded into GCS
     and linked in GBQ (taking `cbs` as default and `83765NED` as example):
 
-    - cbs.v4.83765NED_Observations: The actual values of the dataset
-    - cbs.v4.83765NED_MeasureCodes: Describing the codes that appear in the Measure column of the Observations table.
-    - cbs.v4.83765NED_Dimensions: Information over the dimensions
+    - "cbs.v4.83765NED_Observations" - The actual values of the dataset (***main table***)
+    - "cbs.v4.83765NED_MeasureCodes" - Describing the codes that appear in the Measure column of the Observations table.
+    - "cbs.v4.83765NED_Dimensions" - Information regarding the dimensions
 
-    Additionally, this function will upload all other tables in the dataset, except `Properties`.
+    Additionally, this function will upload all other tables related to the dataset, except for `Properties`.
         
     These may include:
-    - cbs.v4.83765NED_MeasureGroups: Describing the hierarchy of the Measures
+
+    - "cbs.v4.83765NED_MeasureGroups" - Describing the hierarchy of the Measures
+
+    And, for each Dimension listed in the `Dimensions` table (i.e. `{Dimension_1}`)
     
-    And, for each Dimensionlisted in the `Dimensions` table (i.e. `{Dimension_1}`)
-    - cbs.v4.83765NED_{Dimension_1}Codes
-    - cbs.v4.83765NED_{Dimension_1}Groups [IF IT EXISTS]
+    - "cbs.v4.83765NED_{Dimension_1}Codes"
+    - "cbs.v4.83765NED_{Dimension_1}Groups" (IF IT EXISTS)
 
     See *Informatie voor Ontwikelaars*[^odatav4] for details.
 
-    Args:
-        - id (str): table ID like `83583NED`
-        - odata_version (str): either 'v3' or 'v4', indicating the version of the original odata in the source
-        - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl
-        - source (str): source to load data into
-        - config: config object
-
-    Returns:
-        - files_parquet (set): set with paths of local parquet files # TODO: replace with BQ job ids
-
-    [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-opendata-services.pdf
+    [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-ewopendata-services.pdf
     [^odatav4]: https://dataportal.cbs.nl/info/ontwikkelaars
     """
+
     # Get all tablbe urls for given dataset id
     urls = get_urls(id=id, odata_version=odata_version, third_party=third_party)
     # Create directory to store parquest files locally
@@ -568,9 +749,7 @@ def cbsodata_to_gbq(
     )
 
     # Keep only names
-    file_names = get_file_names(
-        files_parquet
-    )  # TODO: Does it matter we change a set to a list here?
+    file_names = get_file_names(files_parquet)
     # Create table in GBQ
     gcs_to_gbq(
         id=id,
@@ -585,34 +764,40 @@ def cbsodata_to_gbq(
     return files_parquet  # TODO: return bq job ids
 
 
-def get_urls(id: str, odata_version: str, third_party: bool = False):
-    """For a given dataset id from CBS, returns a dict with urls of all dataset tables.
+def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
+    """Returns a dict with urls of all dataset tables given a valid CBS dataset id.
 
-    Args:
-        - id (str): table ID like `83583NED`
-        - odata_version (str): either 'v3' or 'v4', indicating the version of the original odata in the source
-        - third_party (boolean): 'opendata.cbs.nl' is used by default (False). Set to true for dataderden.cbs.nl (not available yet for v4)
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED"
+
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+
+    third_party: bool, default=False
+        Flag to indicate dataset is not originally from CBS. Set to true
+        to use dataderden.cbs.nl as base url (not available in v4 yet).
 
     Returns:
-        - urls (dict[str]): list containing all urls of a the dataset's tables
+    urls: dict of str
+        A dict containing all urls of a CBS dataset's tables
 
     Examples:
-        ```
-        >>> dataset_id = '83583NED'
-        >>> urls = get_urls(id=dataset_id, odata_version='v3', third_party=False)
-        >>> for name, url in urls.items():
-                print(f"{name}: {url}")
-        TableInfos: https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos
-        UntypedDataSet: https://opendata.cbs.nl/ODataFeed/odata/83583NED/UntypedDataSet
-        TypedDataSet: https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet
-        DataProperties: https://opendata.cbs.nl/ODataFeed/odata/83583NED/DataProperties
-        CategoryGroups: https://opendata.cbs.nl/ODataFeed/odata/83583NED/CategoryGroups
-        BedrijfstakkenBranchesSBI2008: https://opendata.cbs.nl/ODataFeed/odata/83583NED/BedrijfstakkenBranchesSBI2008
-        Bedrijfsgrootte: https://opendata.cbs.nl/ODataFeed/odata/83583NED/Bedrijfsgrootte
-        Perioden: https://opendata.cbs.nl/ODataFeed/odata/83583NED/Perioden 
-        ```
-        
+    >>> dataset_id = '83583NED'
+    >>> urls = get_urls(id=dataset_id, odata_version="v3", third_party=False)
+    >>> for name, url in urls.items():
+    ...     print(f"{name}: {url}")
+    TableInfos: https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos
+    UntypedDataSet: https://opendata.cbs.nl/ODataFeed/odata/83583NED/UntypedDataSet
+    TypedDataSet: https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet
+    DataProperties: https://opendata.cbs.nl/ODataFeed/odata/83583NED/DataProperties
+    CategoryGroups: https://opendata.cbs.nl/ODataFeed/odata/83583NED/CategoryGroups
+    BedrijfstakkenBranchesSBI2008: https://opendata.cbs.nl/ODataFeed/odata/83583NED/BedrijfstakkenBranchesSBI2008
+    Bedrijfsgrootte: https://opendata.cbs.nl/ODataFeed/odata/83583NED/Bedrijfsgrootte
+    Perioden: https://opendata.cbs.nl/ODataFeed/odata/83583NED/Perioden 
     """
+
     if odata_version == "v4":
         base_url = {
             True: None,  # currently no IV3 links in ODATA V4,
@@ -638,26 +823,58 @@ def get_urls(id: str, odata_version: str, third_party: bool = False):
 
 def create_named_dir(
     id: str, odata_version: str, source: str = "cbs", config: Config = None
-):
-    """A convenience function, creatind a directory according to the following
+) -> Path:
+    """Creates a directory according to a specific structure.
+
+    A convenience function, creatind a directory according to the following
     pattern, based on a config object and the rest of the parameters. Meant to
     create a directory for each dataset where its related tables are written
     into as parquet files.
-    
-    - Directory location:
-    ~/{config.paths.root}/{config.paths.temp}/{source}/{id}/{date_of_creation}/parquet
 
-    For example, if config.paths.root = "Projects/statline-bq" and config.paths.temp = "temp":
-    /Users/Username/Projects/statline-bq/temp/cbs/v3/83583NED/20201210/parquet
-    
+    Directory pattern:
+        
+        "~/{config.paths.root}/{config.paths.temp}/{source}/{id}/{date_of_creation}/parquet"
+
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED"
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    config: Config object
+        Config object holding GCP and local paths
+
+    Returns
+    -------
+    path_to_named_dir: Path
+        path to created folder
+
+    -------
+    Example
+    -------
+    >>> from statline_bq.utils import create_named_dir
+    >>> from statline_bq.config import get_config
+    >>> id = "83583NED"
+    >>> config = get_config("path/to/config.file")
+    >>> print(config.paths.root)
+    Projects/statline-bq
+    >>> print(config.paths.temp)
+    temp
+    >>> dir = create_named_dir(id=id, odata_version="v3")
+    >>> dir
+    PosixPath('/Users/{YOUR_USERNAME}/Projects/statline-bq/temp/cbs/v3/83583NED/20201214/parquet')
     """
+
     # Get paths from config object
     root = Path.home() / Path(config.paths.root)
     temp = root / Path(config.paths.temp)
+    source_dir = temp / Path(getattr(config.paths, locals()["source"]))
 
     # Create placeholders for storage
-    path = temp / Path(
-        f"{source}/{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
+    path = source_dir / Path(
+        f"{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
     path_to_named_dir = create_dir(path)
     return path_to_named_dir
@@ -669,9 +886,28 @@ def tables_to_parquet(
     odata_version: str,
     source: str = "cbs",
     pq_dir: Union[Path, str] = None,
-):
-    """Download datasets from CBS and converting to Parquet
+) -> set:
+    """Downloads all tables related to a valid CBS dataset id, and stores them locally as Parquet files.
+
+    Parameters
+    ----------
+    id : str
+        CBS Dataset id, i.e. "83583NED"
+    urls : dict
+        Dictionary holding urls of all dataset tables from CBS
+    odata_version : str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    source : str, default='cbs
+        The source of the dataset. Currently only "cbs" is relevant.
+    pq_dir : Path or str
+        The directory where the putput Parquet files are stored.
+
+    Returns
+    -------
+    files_parquet: set of Path
+        A set containing Path objects of all output Parquet files
     """
+
     # Create placeholders for storage
     files_parquet = set()
 
@@ -687,7 +923,7 @@ def tables_to_parquet(
         )  # Redundant tables from v3 AND v4
     ]:
 
-        # for v3 urls an appendiz of "?format=json" is needed
+        # for v3 urls an appendix of "?format=json" is needed
         if odata_version == "v3":
             url = "?".join((url, "$format=json"))
 
@@ -710,22 +946,32 @@ def tables_to_parquet(
 
 
 def create_bq_dataset(
-    id: str, source: str, odata_version: str, description: str = None, gcp: Gcp = None,
+    id: str,
+    source: str = "cbs",
+    odata_version: str = None,
+    description: str = None,
+    gcp: Gcp = None,
 ) -> str:
-    """Creates a dataset in Google Big Query. If dataset exists already exists,
-    does nothing.
+    """Creates a dataset in Google Big Query. If dataset exists already exists, does nothing.
 
-    Args:
-        - id (str): string to be used as the dataset id
-        - source (str): source to load data into
-        - odata_version (str): 'v3' or 'v4' indicating the version
-        - description (str): description for the dataset
-        - gcp (Gcp): config object
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    description: str
+        The description of the dataset
+    gcp: Gcp
+        A Gcp Class object, holding GCP parameters
 
     Returns:
-        - string with the dataset id
-        - existing flag indicating whether the dataset already existed when trying to create it
+    dataset.dataset_id: str
+        The id of the created BQ dataset
     """
+
     # Construct a BigQuery client object.
     client = bigquery.Client(project=gcp.project_id)
 
@@ -756,10 +1002,10 @@ def create_bq_dataset(
 def check_bq_dataset(id: str, source: str, odata_version: str, gcp: Gcp = None) -> bool:
     """Check if dataset exists in BQ.
 
-    Args:
+    Parameters:
         - id (str): the dataset id, i.e. '83583NED'
         - source (str): source to load data into
-        - odata_version (str): 'v3' or 'v4' indicating the version
+        - odata_version (str): "v3" or "v4" indicating the version
         - gcp (Gcp): a config object
 
     Returns:
@@ -783,15 +1029,22 @@ def delete_bq_dataset(
 ) -> None:
     """Delete an exisiting dataset from Google Big Query
 
-        Args:
-        - id (str): the dataset id, i.e. '83583NED'
-        - source (str): source to load data into
-        - odata_version (str): 'v3' or 'v4' indicating the version
-        - gcp (Gcp): a config object
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    gcp: Gcp
+        A Gcp Class object, holding GCP parameters
 
-        Returns:
-        - None
+    Returns
+    -------
+    None
     """
+
     # Construct a bq client
     client = bigquery.Client(project=gcp.project_id)
 
@@ -811,19 +1064,33 @@ def get_description_from_gcs(
     gcp: Gcp = None,
     gcs_folder: str = None,
 ) -> str:
-    """Gets previsouly uploaded dataset description from GCS. The description
-    should exist in the following file, under the following structure:
+    """Gets previsouly uploaded dataset description from GCS.
 
-        - {project}/{bucket}/{source}/{odata_version}/{id}/{YYYYMMDD}/{source}.{odata_version}.{id}_Description
-        For example:
-        - dataverbinders-dev/cbs/v4/83765NED/20201127/cbs.v4.83765NED_Description.txt
+    The description should exist in the following file, under the following structure:
 
-    Args:
-        - id (str): table ID like `83583NED`
-        - source (str): source to load data into
-        - odata_version (str): 'v3' or 'v4' indicating the version
-        - gcp: config object
-        - gcs_folder (str): "folder" path in gcs
+        "{project}/{bucket}/{source}/{odata_version}/{id}/{YYYYMMDD}/{source}.{odata_version}.{id}_Description"
+
+    For example:
+
+        "dataverbinders-dev/cbs/v4/83765NED/20201127/cbs.v4.83765NED_Description.txt"
+
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    gcp: Gcp
+        A Gcp Class object, holding GCP parameters
+    gcs_folder : str
+        The GCS folder holding the description txt file
+
+    Returns
+    -------
+    str
+        [description]
     """
     client = storage.Client(project=gcp.project_id)
     bucket = client.get_bucket(gcp.bucket)
@@ -837,26 +1104,44 @@ def gcs_to_gbq(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
+    third_party: bool = False,
     config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
     gcp_env: str = None,
-):  # TODO Return job id
-    """Creates a dataset (if does not exist) in Google Big Query, and underneath
-    creates permanent tables linked to parquet file stored in Google Storage. If
-    dataset exists, removes it and recreates it with most up to date uploaded files (?) # TODO: Is this the best logic?
+) -> None:  # TODO Return job id
+    """Creates a BQ dataset and links all relevant tables from GCS underneath.
+    
+    Creates a dataset (if does not exist) in Google Big Query, and underneath
+    creates permanent tables linked to parquet file stored in Google Storage.
+    If dataset exists, removes it and recreates it with most up to date uploaded files (?) # TODO: Is this the best logic?
+    
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    third_party : bool, default=False
+        Flag to indicate dataset is not originally from CBS. Set to true to use dataderden.cbs.nl as base url (not available in v4 yet).
+    config : Config object
+        Config object holding GCP and local paths.
+    gcs_folder : str
+        The GCS folder holding the description txt file.
+    file_names : list
+        A list holding all file names of tables to be linked.
+    gcp_env: str
+        determines which GCP configuration to use from config.gcp
 
-    Args:
-        - id (str): table ID like `83583NED`
-        - source (str): source to load data into
-        - odata_version (str): 'v3' or 'v4' indicating the version
-        - gcp (Gcp): config object
-        - gcs_folder (str): "folder" path in gcs
-        - file_names (list): list with file names uploaded to gcs TODO: change to get file names from gcs?
 
-    Returns:
-        - TODO
+    Returns
+    -------
+    # TODO Return job id
+        [description]
     """
+
     # # Get all parquet files in gcs folder from GCS
     # storage_client = storage.Client(project=gcp.dev.project_id)
 
@@ -919,24 +1204,10 @@ def gcs_to_gbq(
         # table.description = description
 
         # Create a permanent table linked to the GCS file
-        table = client.create_table(table, exists_ok=True)  # BUG: error raised
+        table = client.create_table(
+            table, exists_ok=True
+        )  # BUG: error raised, using exists_ok=True to avoid
     return None  # TODO Return job id
-
-
-# def cbs_odata_to_gbq(
-#     id: str, source: str = "cbs", third_party: bool = False, config: Config = None,
-# ):  # TODO -> Add Paths config object):
-
-#     print(f"Processing dataset {id}")
-#     # Check if v4
-#     if check_v4(id=id, third_party=third_party) == "v4":
-#         cbsodatav4_to_gbq(id=id, source=source, third_party=third_party, config=config)
-#     else:
-#         cbsodatav3_to_gbq(id=id, source=source, third_party=third_party, config=config)
-#     print(
-#         f"Completed dataset {id}"
-#     )  # TODO - add response from google if possible (some success/failure flag)
-#     return None
 
 
 def main(
@@ -945,7 +1216,7 @@ def main(
     third_party: bool = False,
     config: Config = None,
     gcp_env: str = "dev",
-):
+) -> None:
     gcp_env = gcp_env.lower()
     if check_gcp_env(gcp_env):
         print(f"Processing dataset {id}")
