@@ -16,6 +16,25 @@ from google.api_core import exceptions
 
 
 def check_gcp_env(gcp_env: str, options: List[str] = ["dev", "test", "prod"]) -> bool:
+    """Check that gcp_env is one of the permitted options
+
+    Parameters
+    ----------
+    gcp_env : str
+        variable to check
+    options : List[str], default=["dev", "test", "prod"]
+        list of permittable options
+
+    Returns
+    -------
+    bool
+        True if gcp_env is one of options
+
+    Raises
+    ------
+    ValueError
+        If gcp_env is not one of options
+    """
     if gcp_env not in options:
         raise ValueError(f"gcp_env must be one of {options}")
     else:
@@ -1091,6 +1110,7 @@ def gcs_to_gbq(
     config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
+    gcp_env: str = None,
 ):
     """Creates a BQ dataset and links all relevant tables from GCS underneath.
     
