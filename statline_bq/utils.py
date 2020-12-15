@@ -514,7 +514,7 @@ def upload_to_gcs(
     odata_version: str = None,
     id: str = None,
     config: Config = None,
-    gcp_env: str = "dev",
+    gcp_env: str = None,
 ) -> str:  # TODO change the return value to some indication or id from Google?:
     """Uploads all files in a given directory to Google Cloud Storage.
 
@@ -542,7 +542,7 @@ def upload_to_gcs(
         CBS Dataset id, i.e. "83583NED"
     config: Config
         Config object holding GCP and local paths
-    gcp_env: str, default="dev"
+    gcp_env: str
         determines which GCP configuration to use from config.gcp
 
 
@@ -1132,6 +1132,8 @@ def gcs_to_gbq(
         The GCS folder holding the description txt file.
     file_names : list
         A list holding all file names of tables to be linked.
+    gcp_env: str
+        determines which GCP configuration to use from config.gcp
 
 
     Returns
