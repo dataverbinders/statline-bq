@@ -59,7 +59,6 @@ def check_v4(id: str, third_party: bool = False) -> str:
         "v4" if exists as odata v4, "v3" otherwise.
     """
 
-    print("DEFINITELY LOCAL VERSION!")
     base_url = {
         True: None,  # currently no IV3 links in ODATA V4,
         False: f"https://odata4.cbs.nl/CBS/{id}",
