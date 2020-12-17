@@ -720,11 +720,29 @@ def get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
 
 
 def bq_update_main_table_col_descriptions(
-    dataset_ref: str, descriptions: dict, gcp: Gcp = None, gcp_env: str = "dev"
-):
+    dataset_ref: str, descriptions: dict, config: Config = None, gcp_env: str = "dev"
+) -> bigquery.Table:
+    """Updates column descriptions of main table for existing BQ dataset
+
+    Parameters
+    ----------
+    dataset_ref : str
+        dataset reference where main table exists
+    descriptions : dict
+        dictionary holding column descriptions
+    gcp : Gcp,
+        Gcp object holding GCP configurations
+    gcp_env : str, default = "dev"
+        determines which GCP configuration to use from gcp
+
+    Returns
+    -------
+    bigquery.Table
+        The updated table
+    """
 
     # Set GCP environmnet
-    gcp = gcp.__getattribute__(gcp_env)
+    gcp = config.gcp.__getattribute__(gcp_env)
 
     # Construct a BigQuery client object.
     client = bigquery.Client(project=gcp.project_id)
@@ -767,7 +785,8 @@ def get_col_descs_from_gcs(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
-    gcp: Gcp = None,
+    config: Config = None,
+    gcp_env: str = "dev",
     gcs_folder: str = None,
 ) -> dict:
     """Gets previously uploaded dataset column descriptions from GCS.
@@ -798,7 +817,7 @@ def get_col_descs_from_gcs(
     dict
         Dictionary holding column descriptions
     """
-
+    gcp = set_gcp(config, gcp_env)
     client = storage.Client(project=gcp.project_id)
     bucket = client.get_bucket(gcp.bucket)
     blob = bucket.get_blob(
@@ -993,9 +1012,7 @@ def cbsodata_to_gbq(
     # }
 
     if odata_version == "v3":
-        bq_update_main_table_col_descriptions(
-            dataset_ref, desc_dict, config.gcp, gcp_env
-        )
+        bq_update_main_table_col_descriptions(dataset_ref, desc_dict, config, gcp_env)
 
     return files_parquet  # TODO: return bq job ids
 
