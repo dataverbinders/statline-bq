@@ -38,9 +38,15 @@ from pathlib import Path
 
 
 @click.command()
+@click.option(
+    &#34;--gcp-env&#34;,
+    type=click.Choice([&#34;dev&#34;, &#34;test&#34;, &#34;prod&#34;], case_sensitive=False),
+    default=&#34;dev&#34;,
+    help=&#39;Which gcp configuration to use - can take either &#34;dev&#34;, &#34;test&#34; or &#34;prod&#34;.&#39;,
+)
 # @click.argument(&#34;config&#34;, type=click.File(&#34;r&#34;))
 # @click.argument(&#34;dataset&#34;)
-def upload_datasets():
+def upload_datasets(gcp_env: str):
     &#34;&#34;&#34;
     This CLI uploads datasets from CBS to Google Cloud Platform.
 
@@ -48,8 +54,9 @@ def upload_datasets():
     GCS Bucket are connected. Additionally, you must hold the proper IAM
     (permissions) settings enabled on this project.
 
-    The GCP settings, along with a list of the datasets you wish to upload
-    should be manually written into `config.toml`.
+    The GCP settings, should be manually written into &#34;config.toml&#34;.
+
+    The datasets sould be manually written into &#34;datasets.toml&#34;.
 
     For further information, see the documentaion &#34;????&#34;
     &#34;&#34;&#34;
@@ -58,18 +65,24 @@ def upload_datasets():
     datasets_path = Path(&#34;./datasets.toml&#34;)
     config = get_config(config_path)
     datasets = get_datasets(datasets_path)
+    gcp_env = gcp_env.lower()
+    config_envs = {
+        &#34;dev&#34;: config.gcp.dev,
+        &#34;test&#34;: config.gcp.test,
+        &#34;prod&#34;: config.gcp.prod,
+    }
+    gcp_project = config_envs.get(gcp_env)
     click.echo(&#34;The following datasets will be downloaded from CBS and uploaded into:&#34;)
     click.echo(&#34;&#34;)
-    click.echo(
-        f&#34;Project: {config.gcp.dev.project_id}&#34;
-    )  # TODO -&gt; handle dev, test and prod appropriatley
-    click.echo(f&#34;Bucket:  {config.gcp.dev.bucket}&#34;)
+    click.echo(f&#34;Project: {gcp_project.project_id}&#34;)
+    click.echo(f&#34;Bucket:  {gcp_project.bucket}&#34;)
     click.echo(&#34;&#34;)
     for i, dataset in enumerate(datasets):
         click.echo(f&#34;{i+1}. {dataset}&#34;)
     click.echo(&#34;&#34;)
     for id in datasets:
-        main(id=id, config=config)</code></pre>
+        main(id=id, config=config, gcp_env=gcp_env)
+    click.echo(&#34;Finished processing datasets.&#34;)</code></pre>
 </details>
 </section>
 <section>

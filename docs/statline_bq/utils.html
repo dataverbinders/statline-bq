@@ -32,7 +32,7 @@ white-space: pre-wrap;
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">import subprocess
-from typing import Union, Iterable
+from typing import Union, Iterable, List
 from os import remove, listdir, rmdir, PathLike
 from pathlib import Path
 from glob import glob
@@ -46,6 +46,32 @@ from google.cloud import storage
 from google.cloud import bigquery
 from statline_bq.config import Config, Gcp
 from google.api_core import exceptions
+
+
+def check_gcp_env(gcp_env: str, options: List[str] = [&#34;dev&#34;, &#34;test&#34;, &#34;prod&#34;]) -&gt; bool:
+    &#34;&#34;&#34;Check that gcp_env is one of the permitted options
+
+    Parameters
+    ----------
+    gcp_env : str
+        variable to check
+    options : List[str], default=[&#34;dev&#34;, &#34;test&#34;, &#34;prod&#34;]
+        list of permittable options
+
+    Returns
+    -------
+    bool
+        True if gcp_env is one of options
+
+    Raises
+    ------
+    ValueError
+        If gcp_env is not one of options
+    &#34;&#34;&#34;
+    if gcp_env not in options:
+        raise ValueError(f&#34;gcp_env must be one of {options}&#34;)
+    else:
+        return True
 
 
 def check_v4(id: str, third_party: bool = False) -&gt; str:
@@ -295,7 +321,7 @@ def get_odata_v4_curl(  # TODO -&gt; CURL command does not process url with ?$sk
     return bag
 
 
-def get_odata(target_url: str, odata_version: str):
+def get_odata(target_url: str, odata_version: str) -&gt; db:
     &#34;&#34;&#34;Gets a table from a valid CBS url and returns it as a Dask bag.
 
     A wrapper, calling the appropriate version function to get the table from
@@ -327,7 +353,7 @@ def get_odata(target_url: str, odata_version: str):
         raise ValueError(&#34;odata version must be either &#39;v3&#39; or &#39;v4&#39;&#34;)
 
 
-def get_odata_v3(target_url: str):
+def get_odata_v3(target_url: str) -&gt; db:
     &#34;&#34;&#34;Gets a table from a valid url for CBS dataset with Odata v3.
 
     This function uses standard requests.get() to retrieve data at target_url
@@ -384,9 +410,7 @@ def get_odata_v3(target_url: str):
     return bag
 
 
-def get_odata_v4(
-    target_url: str,
-):  # TODO -&gt; How to define Bag for type hinting? (maybe here: https://docs.python.org/3/library/typing.html#newtype)
+def get_odata_v4(target_url: str,) -&gt; db:
     &#34;&#34;&#34;Gets a table from a specific url for CBS Odata v4.
     This function uses standard requests.get() to retrieve data at target_url
     in json format, and concats it all into a Dask Bag to handle memory
@@ -507,13 +531,24 @@ def convert_table_to_parquet(
     return pq_path
 
 
+def set_gcp(config: Config, gcp_env: str) -&gt; Gcp:
+    gcp_env = gcp_env.lower()
+    config_envs = {
+        &#34;dev&#34;: config.gcp.dev,
+        &#34;test&#34;: config.gcp.test,
+        &#34;prod&#34;: config.gcp.prod,
+    }
+    return config_envs[gcp_env]
+
+
 def upload_to_gcs(
     dir: Path,
     source: str = &#34;cbs&#34;,
     odata_version: str = None,
     id: str = None,
     config: Config = None,
-):
+    gcp_env: str = None,
+) -&gt; str:  # TODO change the return value to some indication or id from Google?:
     &#34;&#34;&#34;Uploads all files in a given directory to Google Cloud Storage.
 
     This function is meant to be used for uploading all tables of a certain dataset retrieved from
@@ -538,18 +573,22 @@ def upload_to_gcs(
         version of the odata for this dataset - must be either &#34;v3&#34; or &#34;v4&#34;.
     id: str
         CBS Dataset id, i.e. &#34;83583NED&#34;
+    config: Config
+        Config object holding GCP and local paths
+    gcp_env: str
+        determines which GCP configuration to use from config.gcp
+
 
     Returns
     -------
     gcs_folder: str
         The folder (=blob) into which the tables have been uploaded # TODO -&gt; Return success/ fail code?/job ID
     &#34;&#34;&#34;
-
-    # Initialize Google Storage Client, get bucket, set blob
-    gcs = storage.Client(
-        project=config.gcp.dev.project_id
-    )  # TODO -&gt; handle dev, test and prod appropriatley
-    gcs_bucket = gcs.get_bucket(config.gcp.dev.bucket)
+    # Initialize Google Storage Client and get bucket according to gcp_env
+    gcp = set_gcp(config=config, gcp_env=gcp_env)
+    gcs = storage.Client(project=gcp.project_id)
+    gcs_bucket = gcs.get_bucket(gcp.bucket)
+    # Set blob
     gcs_folder = (
         f&#34;{source}/{odata_version}/{id}/{datetime.today().date().strftime(&#39;%Y%m%d&#39;)}&#34;
     )
@@ -603,7 +642,8 @@ def cbsodata_to_gbq(
     third_party: bool = False,
     source: str = &#34;cbs&#34;,
     config: Config = None,
-):
+    gcp_env: str = None,
+) -&gt; set:  # TODO change return value
     &#34;&#34;&#34;Loads a CBS dataset as a dataset in Google BigQuery.
 
     Retrieves a given dataset id from CBS, and converts it locally to Parquet. The
@@ -732,7 +772,14 @@ def cbsodata_to_gbq(
     )
 
     # Upload to GCS
-    gcs_folder = upload_to_gcs(pq_dir, source, odata_version, id, config)
+    gcs_folder = upload_to_gcs(
+        dir=pq_dir,
+        source=source,
+        odata_version=odata_version,
+        id=id,
+        config=config,
+        gcp_env=gcp_env,
+    )
 
     # Keep only names
     file_names = get_file_names(files_parquet)
@@ -741,16 +788,16 @@ def cbsodata_to_gbq(
         id=id,
         source=source,
         odata_version=odata_version,
-        third_party=third_party,
         config=config,
         gcs_folder=gcs_folder,
         file_names=file_names,
+        gcp_env=gcp_env,
     )
 
     return files_parquet  # TODO: return bq job ids
 
 
-def get_urls(id: str, odata_version: str, third_party: bool = False):
+def get_urls(id: str, odata_version: str, third_party: bool = False) -&gt; dict:
     &#34;&#34;&#34;Returns a dict with urls of all dataset tables given a valid CBS dataset id.
 
     Parameters
@@ -809,7 +856,7 @@ def get_urls(id: str, odata_version: str, third_party: bool = False):
 
 def create_named_dir(
     id: str, odata_version: str, source: str = &#34;cbs&#34;, config: Config = None
-):
+) -&gt; Path:
     &#34;&#34;&#34;Creates a directory according to a specific structure.
 
     A convenience function, creatind a directory according to the following
@@ -959,7 +1006,7 @@ def create_bq_dataset(
     &#34;&#34;&#34;
 
     # Construct a BigQuery client object.
-    client = bigquery.Client(project=gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     # Set dataset_id to the ID of the dataset to create.
     dataset_id = f&#34;{client.project}.{source}_{odata_version}_{id}&#34;
@@ -968,7 +1015,7 @@ def create_bq_dataset(
     dataset = bigquery.Dataset(dataset_id)
 
     # Specify the geographic location where the dataset should reside.
-    dataset.location = gcp.dev.location
+    dataset.location = gcp.location
 
     # Add description if provided
     dataset.description = description
@@ -997,7 +1044,7 @@ def check_bq_dataset(id: str, source: str, odata_version: str, gcp: Gcp = None) 
     Returns:
         - True if exists, False if does not exists
     &#34;&#34;&#34;
-    client = bigquery.Client(project=gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     dataset_id = f&#34;{source}_{odata_version}_{id}&#34;
 
@@ -1032,7 +1079,7 @@ def delete_bq_dataset(
     &#34;&#34;&#34;
 
     # Construct a bq client
-    client = bigquery.Client(project=gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     # Set bq dataset id string
     dataset_id = f&#34;{source}_{odata_version}_{id}&#34;
@@ -1078,9 +1125,8 @@ def get_description_from_gcs(
     str
         [description]
     &#34;&#34;&#34;
-
-    client = storage.Client(project=gcp.dev.project_id)
-    bucket = client.get_bucket(gcp.dev.bucket)
+    client = storage.Client(project=gcp.project_id)
+    bucket = client.get_bucket(gcp.bucket)
     blob = bucket.get_blob(
         f&#34;{gcs_folder}/{source}.{odata_version}.{id}_Description.txt&#34;
     )
@@ -1095,7 +1141,8 @@ def gcs_to_gbq(
     config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
-):
+    gcp_env: str = None,
+) -&gt; None:  # TODO Return job id
     &#34;&#34;&#34;Creates a BQ dataset and links all relevant tables from GCS underneath.
     
     Creates a dataset (if does not exist) in Google Big Query, and underneath
@@ -1118,6 +1165,8 @@ def gcs_to_gbq(
         The GCS folder holding the description txt file.
     file_names : list
         A list holding all file names of tables to be linked.
+    gcp_env: str
+        determines which GCP configuration to use from config.gcp
 
 
     Returns
@@ -1140,23 +1189,19 @@ def gcs_to_gbq(
     #     for blob in storage_client.list_blobs(gcp.dev.bucket, prefix=gcs_folder)
     #     if not blob.name.endswith(&#34;.txt&#34;)
     # ]
-
+    gcp = set_gcp(config=config, gcp_env=gcp_env)
     # Get description text from txt file
     description = get_description_from_gcs(
         id=id,
         source=source,
         odata_version=odata_version,
-        gcp=config.gcp,
+        gcp=gcp,
         gcs_folder=gcs_folder,
     )
 
     # Check if dataset exists and delete if it does TODO: maybe delete anyway (deleting uses not_found_ok to ignore error if does not exist)
-    if check_bq_dataset(
-        id=id, source=source, odata_version=odata_version, gcp=config.gcp
-    ):
-        delete_bq_dataset(
-            id=id, source=source, odata_version=odata_version, gcp=config.gcp
-        )
+    if check_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp):
+        delete_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp)
 
     # Create a dataset in BQ
     dataset_id = create_bq_dataset(
@@ -1164,7 +1209,7 @@ def gcs_to_gbq(
         source=source,
         odata_version=odata_version,
         description=description,
-        gcp=config.gcp,
+        gcp=gcp,
     )
     # if not existing:
     # Skip?
@@ -1172,11 +1217,11 @@ def gcs_to_gbq(
     # Handle existing dataset - delete and recreate? Repopulate? TODO
 
     # Initialize client
-    client = bigquery.Client(project=config.gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     # Configure the external data source
     # dataset_id = f&#34;{source}_{odata_version}_{id}&#34;
-    dataset_ref = bigquery.DatasetReference(config.gcp.dev.project_id, dataset_id)
+    dataset_ref = bigquery.DatasetReference(gcp.project_id, dataset_id)
 
     # Loop over all files related to this dataset id
     for name in file_names:
@@ -1186,7 +1231,7 @@ def gcs_to_gbq(
 
         external_config = bigquery.ExternalConfig(&#34;PARQUET&#34;)
         external_config.source_uris = [
-            f&#34;https://storage.cloud.google.com/{config.gcp.dev.bucket}/{gcs_folder}/{name}&#34;  # TODO: Handle dev/test/prod?
+            f&#34;https://storage.cloud.google.com/{gcp.bucket}/{gcs_folder}/{name}&#34;  # TODO: Handle dev/test/prod?
         ]
         table.external_data_configuration = external_config
         # table.description = description
@@ -1199,28 +1244,35 @@ def gcs_to_gbq(
 
 
 def main(
-    id: str, source: str = &#34;cbs&#34;, third_party: bool = False, config: Config = None,
-):
-    print(f&#34;Processing dataset {id}&#34;)
-    odata_version = check_v4(id=id, third_party=third_party)
-    cbsodata_to_gbq(
-        id=id,
-        odata_version=odata_version,
-        third_party=third_party,
-        source=source,
-        config=config,
-    )
-    print(
-        f&#34;Completed dataset {id}&#34;
-    )  # TODO - add response from google if possible (some success/failure flag)
-    return None
+    id: str,
+    source: str = &#34;cbs&#34;,
+    third_party: bool = False,
+    config: Config = None,
+    gcp_env: str = &#34;dev&#34;,
+) -&gt; None:
+    gcp_env = gcp_env.lower()
+    if check_gcp_env(gcp_env):
+        print(f&#34;Processing dataset {id}&#34;)
+        odata_version = check_v4(id=id, third_party=third_party)
+        cbsodata_to_gbq(
+            id=id,
+            odata_version=odata_version,
+            third_party=third_party,
+            source=source,
+            config=config,
+            gcp_env=gcp_env,
+        )
+        print(
+            f&#34;Completed dataset {id}&#34;
+        )  # TODO - add response from google if possible (some success/failure flag)
+        return None
 
 
 if __name__ == &#34;__main__&#34;:
     from statline_bq.config import get_config
 
     config = get_config(&#34;./statline_bq/config.toml&#34;)
-    main(&#34;83583NED&#34;, config=config)
+    main(&#34;83583NED&#34;, config=config, gcp_env=&#34;dev&#34;)
 
 # from statline_bq.config import get_config
 
@@ -1249,7 +1301,7 @@ if __name__ == &#34;__main__&#34;:
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="statline_bq.utils.cbsodata_to_gbq"><code class="name flex">
-<span>def <span class="ident">cbsodata_to_gbq</span></span>(<span>id: str, odata_version: str, third_party: bool = False, source: str = 'cbs', config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a> = None)</span>
+<span>def <span class="ident">cbsodata_to_gbq</span></span>(<span>id: str, odata_version: str, third_party: bool = False, source: str = 'cbs', config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a> = None, gcp_env: str = None) ‑> set</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Loads a CBS dataset as a dataset in Google BigQuery.</p>
@@ -1357,7 +1409,8 @@ and linked in GBQ (taking <code>cbs</code> as default and <code>83765NED</code> 
     third_party: bool = False,
     source: str = &#34;cbs&#34;,
     config: Config = None,
-):
+    gcp_env: str = None,
+) -&gt; set:  # TODO change return value
     &#34;&#34;&#34;Loads a CBS dataset as a dataset in Google BigQuery.
 
     Retrieves a given dataset id from CBS, and converts it locally to Parquet. The
@@ -1486,7 +1539,14 @@ and linked in GBQ (taking <code>cbs</code> as default and <code>83765NED</code> 
     )
 
     # Upload to GCS
-    gcs_folder = upload_to_gcs(pq_dir, source, odata_version, id, config)
+    gcs_folder = upload_to_gcs(
+        dir=pq_dir,
+        source=source,
+        odata_version=odata_version,
+        id=id,
+        config=config,
+        gcp_env=gcp_env,
+    )
 
     # Keep only names
     file_names = get_file_names(files_parquet)
@@ -1495,10 +1555,10 @@ and linked in GBQ (taking <code>cbs</code> as default and <code>83765NED</code> 
         id=id,
         source=source,
         odata_version=odata_version,
-        third_party=third_party,
         config=config,
         gcs_folder=gcs_folder,
         file_names=file_names,
+        gcp_env=gcp_env,
     )
 
     return files_parquet  # TODO: return bq job ids</code></pre>
@@ -1536,7 +1596,7 @@ and linked in GBQ (taking <code>cbs</code> as default and <code>83765NED</code> 
     Returns:
         - True if exists, False if does not exists
     &#34;&#34;&#34;
-    client = bigquery.Client(project=gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     dataset_id = f&#34;{source}_{odata_version}_{id}&#34;
 
@@ -1547,6 +1607,58 @@ and linked in GBQ (taking <code>cbs</code> as default and <code>83765NED</code> 
     except exceptions.NotFound:
         # print(f&#34;Dataset {dataset_id} is not found&#34;
         return False</code></pre>
+</details>
+</dd>
+<dt id="statline_bq.utils.check_gcp_env"><code class="name flex">
+<span>def <span class="ident">check_gcp_env</span></span>(<span>gcp_env: str, options: List[str] = ['dev', 'test', 'prod']) ‑> bool</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Check that gcp_env is one of the permitted options</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>gcp_env</code></strong> :&ensp;<code>str</code></dt>
+<dd>variable to check</dd>
+<dt><strong><code>options</code></strong> :&ensp;<code>List[str]</code>, default=<code>["dev", "test", "prod"]</code></dt>
+<dd>list of permittable options</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>bool</code></dt>
+<dd>True if gcp_env is one of options</dd>
+</dl>
+<h2 id="raises">Raises</h2>
+<dl>
+<dt><code>ValueError</code></dt>
+<dd>If gcp_env is not one of options</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def check_gcp_env(gcp_env: str, options: List[str] = [&#34;dev&#34;, &#34;test&#34;, &#34;prod&#34;]) -&gt; bool:
+    &#34;&#34;&#34;Check that gcp_env is one of the permitted options
+
+    Parameters
+    ----------
+    gcp_env : str
+        variable to check
+    options : List[str], default=[&#34;dev&#34;, &#34;test&#34;, &#34;prod&#34;]
+        list of permittable options
+
+    Returns
+    -------
+    bool
+        True if gcp_env is one of options
+
+    Raises
+    ------
+    ValueError
+        If gcp_env is not one of options
+    &#34;&#34;&#34;
+    if gcp_env not in options:
+        raise ValueError(f&#34;gcp_env must be one of {options}&#34;)
+    else:
+        return True</code></pre>
 </details>
 </dd>
 <dt id="statline_bq.utils.check_v4"><code class="name flex">
@@ -1757,7 +1869,7 @@ The id of the created BQ dataset</p></div>
     &#34;&#34;&#34;
 
     # Construct a BigQuery client object.
-    client = bigquery.Client(project=gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     # Set dataset_id to the ID of the dataset to create.
     dataset_id = f&#34;{client.project}.{source}_{odata_version}_{id}&#34;
@@ -1766,7 +1878,7 @@ The id of the created BQ dataset</p></div>
     dataset = bigquery.Dataset(dataset_id)
 
     # Specify the geographic location where the dataset should reside.
-    dataset.location = gcp.dev.location
+    dataset.location = gcp.location
 
     # Add description if provided
     dataset.description = description
@@ -1827,7 +1939,7 @@ The id of the created BQ dataset</p></div>
 </details>
 </dd>
 <dt id="statline_bq.utils.create_named_dir"><code class="name flex">
-<span>def <span class="ident">create_named_dir</span></span>(<span>id: str, odata_version: str, source: str = 'cbs', config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a> = None)</span>
+<span>def <span class="ident">create_named_dir</span></span>(<span>id: str, odata_version: str, source: str = 'cbs', config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a> = None) ‑> pathlib.Path</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Creates a directory according to a specific structure.</p>
@@ -1874,7 +1986,7 @@ PosixPath('/Users/{YOUR_USERNAME}/Projects/statline-bq/temp/cbs/v3/83583NED/2020
 </summary>
 <pre><code class="python">def create_named_dir(
     id: str, odata_version: str, source: str = &#34;cbs&#34;, config: Config = None
-):
+) -&gt; Path:
     &#34;&#34;&#34;Creates a directory according to a specific structure.
 
     A convenience function, creatind a directory according to the following
@@ -1978,7 +2090,7 @@ PosixPath('/Users/{YOUR_USERNAME}/Projects/statline-bq/temp/cbs/v3/83583NED/2020
     &#34;&#34;&#34;
 
     # Construct a bq client
-    client = bigquery.Client(project=gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     # Set bq dataset id string
     dataset_id = f&#34;{source}_{odata_version}_{id}&#34;
@@ -1990,7 +2102,7 @@ PosixPath('/Users/{YOUR_USERNAME}/Projects/statline-bq/temp/cbs/v3/83583NED/2020
 </details>
 </dd>
 <dt id="statline_bq.utils.gcs_to_gbq"><code class="name flex">
-<span>def <span class="ident">gcs_to_gbq</span></span>(<span>id: str, source: str = 'cbs', odata_version: str = None, third_party: bool = False, config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a> = None, gcs_folder: str = None, file_names: list = None)</span>
+<span>def <span class="ident">gcs_to_gbq</span></span>(<span>id: str, source: str = 'cbs', odata_version: str = None, third_party: bool = False, config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a> = None, gcs_folder: str = None, file_names: list = None, gcp_env: str = None) ‑> NoneType</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Creates a BQ dataset and links all relevant tables from GCS underneath.</p>
@@ -2013,6 +2125,8 @@ If dataset exists, removes it and recreates it with most up to date uploaded fil
 <dd>The GCS folder holding the description txt file.</dd>
 <dt><strong><code>file_names</code></strong> :&ensp;<code>list</code></dt>
 <dd>A list holding all file names of tables to be linked.</dd>
+<dt><strong><code>gcp_env</code></strong> :&ensp;<code>str</code></dt>
+<dd>determines which GCP configuration to use from config.gcp</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <h1 id="todo-return-job-id">TODO Return job id</h1>
@@ -2030,7 +2144,8 @@ If dataset exists, removes it and recreates it with most up to date uploaded fil
     config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
-):
+    gcp_env: str = None,
+) -&gt; None:  # TODO Return job id
     &#34;&#34;&#34;Creates a BQ dataset and links all relevant tables from GCS underneath.
     
     Creates a dataset (if does not exist) in Google Big Query, and underneath
@@ -2053,6 +2168,8 @@ If dataset exists, removes it and recreates it with most up to date uploaded fil
         The GCS folder holding the description txt file.
     file_names : list
         A list holding all file names of tables to be linked.
+    gcp_env: str
+        determines which GCP configuration to use from config.gcp
 
 
     Returns
@@ -2075,23 +2192,19 @@ If dataset exists, removes it and recreates it with most up to date uploaded fil
     #     for blob in storage_client.list_blobs(gcp.dev.bucket, prefix=gcs_folder)
     #     if not blob.name.endswith(&#34;.txt&#34;)
     # ]
-
+    gcp = set_gcp(config=config, gcp_env=gcp_env)
     # Get description text from txt file
     description = get_description_from_gcs(
         id=id,
         source=source,
         odata_version=odata_version,
-        gcp=config.gcp,
+        gcp=gcp,
         gcs_folder=gcs_folder,
     )
 
     # Check if dataset exists and delete if it does TODO: maybe delete anyway (deleting uses not_found_ok to ignore error if does not exist)
-    if check_bq_dataset(
-        id=id, source=source, odata_version=odata_version, gcp=config.gcp
-    ):
-        delete_bq_dataset(
-            id=id, source=source, odata_version=odata_version, gcp=config.gcp
-        )
+    if check_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp):
+        delete_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp)
 
     # Create a dataset in BQ
     dataset_id = create_bq_dataset(
@@ -2099,7 +2212,7 @@ If dataset exists, removes it and recreates it with most up to date uploaded fil
         source=source,
         odata_version=odata_version,
         description=description,
-        gcp=config.gcp,
+        gcp=gcp,
     )
     # if not existing:
     # Skip?
@@ -2107,11 +2220,11 @@ If dataset exists, removes it and recreates it with most up to date uploaded fil
     # Handle existing dataset - delete and recreate? Repopulate? TODO
 
     # Initialize client
-    client = bigquery.Client(project=config.gcp.dev.project_id)
+    client = bigquery.Client(project=gcp.project_id)
 
     # Configure the external data source
     # dataset_id = f&#34;{source}_{odata_version}_{id}&#34;
-    dataset_ref = bigquery.DatasetReference(config.gcp.dev.project_id, dataset_id)
+    dataset_ref = bigquery.DatasetReference(gcp.project_id, dataset_id)
 
     # Loop over all files related to this dataset id
     for name in file_names:
@@ -2121,7 +2234,7 @@ If dataset exists, removes it and recreates it with most up to date uploaded fil
 
         external_config = bigquery.ExternalConfig(&#34;PARQUET&#34;)
         external_config.source_uris = [
-            f&#34;https://storage.cloud.google.com/{config.gcp.dev.bucket}/{gcs_folder}/{name}&#34;  # TODO: Handle dev/test/prod?
+            f&#34;https://storage.cloud.google.com/{gcp.bucket}/{gcs_folder}/{name}&#34;  # TODO: Handle dev/test/prod?
         ]
         table.external_data_configuration = external_config
         # table.description = description
@@ -2373,9 +2486,8 @@ to call it wrapped to allow for both "v3" and "v4" functionality.</p>
     str
         [description]
     &#34;&#34;&#34;
-
-    client = storage.Client(project=gcp.dev.project_id)
-    bucket = client.get_bucket(gcp.dev.bucket)
+    client = storage.Client(project=gcp.project_id)
+    bucket = client.get_bucket(gcp.bucket)
     blob = bucket.get_blob(
         f&#34;{gcs_folder}/{source}.{odata_version}.{id}_Description.txt&#34;
     )
@@ -2450,7 +2562,7 @@ another_file.png
 </details>
 </dd>
 <dt id="statline_bq.utils.get_odata"><code class="name flex">
-<span>def <span class="ident">get_odata</span></span>(<span>target_url: str, odata_version: str)</span>
+<span>def <span class="ident">get_odata</span></span>(<span>target_url: str, odata_version: str) ‑> <module 'dask.bag' from '/Users/tslilstrauss/Projects/statline-bq/.venv/lib/python3.8/site-packages/dask/bag/__init__.py'></span>
 </code></dt>
 <dd>
 <div class="desc"><p>Gets a table from a valid CBS url and returns it as a Dask bag.</p>
@@ -2477,7 +2589,7 @@ a valid CBS url, leading to a table in OData format.</p>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def get_odata(target_url: str, odata_version: str):
+<pre><code class="python">def get_odata(target_url: str, odata_version: str) -&gt; db:
     &#34;&#34;&#34;Gets a table from a valid CBS url and returns it as a Dask bag.
 
     A wrapper, calling the appropriate version function to get the table from
@@ -2510,7 +2622,7 @@ a valid CBS url, leading to a table in OData format.</p>
 </details>
 </dd>
 <dt id="statline_bq.utils.get_odata_v3"><code class="name flex">
-<span>def <span class="ident">get_odata_v3</span></span>(<span>target_url: str)</span>
+<span>def <span class="ident">get_odata_v3</span></span>(<span>target_url: str) ‑> <module 'dask.bag' from '/Users/tslilstrauss/Projects/statline-bq/.venv/lib/python3.8/site-packages/dask/bag/__init__.py'></span>
 </code></dt>
 <dd>
 <div class="desc"><p>Gets a table from a valid url for CBS dataset with Odata v3.</p>
@@ -2536,7 +2648,7 @@ wrapped to allow for both "v3" and "v4" functionality.</p>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def get_odata_v3(target_url: str):
+<pre><code class="python">def get_odata_v3(target_url: str) -&gt; db:
     &#34;&#34;&#34;Gets a table from a valid url for CBS dataset with Odata v3.
 
     This function uses standard requests.get() to retrieve data at target_url
@@ -2594,7 +2706,7 @@ wrapped to allow for both "v3" and "v4" functionality.</p>
 </details>
 </dd>
 <dt id="statline_bq.utils.get_odata_v4"><code class="name flex">
-<span>def <span class="ident">get_odata_v4</span></span>(<span>target_url: str)</span>
+<span>def <span class="ident">get_odata_v4</span></span>(<span>target_url: str) ‑> <module 'dask.bag' from '/Users/tslilstrauss/Projects/statline-bq/.venv/lib/python3.8/site-packages/dask/bag/__init__.py'></span>
 </code></dt>
 <dd>
 <div class="desc"><p>Gets a table from a specific url for CBS Odata v4.
@@ -2620,9 +2732,7 @@ wrapped to allow for both "v3" and "v4" functionality.</p>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def get_odata_v4(
-    target_url: str,
-):  # TODO -&gt; How to define Bag for type hinting? (maybe here: https://docs.python.org/3/library/typing.html#newtype)
+<pre><code class="python">def get_odata_v4(target_url: str,) -&gt; db:
     &#34;&#34;&#34;Gets a table from a specific url for CBS Odata v4.
     This function uses standard requests.get() to retrieve data at target_url
     in json format, and concats it all into a Dask Bag to handle memory
@@ -2741,7 +2851,7 @@ wrapped to allow for both "v3" and "v4" functionality.</p>
 </details>
 </dd>
 <dt id="statline_bq.utils.get_urls"><code class="name flex">
-<span>def <span class="ident">get_urls</span></span>(<span>id: str, odata_version: str, third_party: bool = False)</span>
+<span>def <span class="ident">get_urls</span></span>(<span>id: str, odata_version: str, third_party: bool = False) ‑> dict</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Returns a dict with urls of all dataset tables given a valid CBS dataset id.</p>
@@ -2800,7 +2910,7 @@ to use dataderden.cbs.nl as base url (not available in v4 yet).</dd>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def get_urls(id: str, odata_version: str, third_party: bool = False):
+<pre><code class="python">def get_urls(id: str, odata_version: str, third_party: bool = False) -&gt; dict:
     &#34;&#34;&#34;Returns a dict with urls of all dataset tables given a valid CBS dataset id.
 
     Parameters
@@ -2858,7 +2968,7 @@ to use dataderden.cbs.nl as base url (not available in v4 yet).</dd>
 </details>
 </dd>
 <dt id="statline_bq.utils.main"><code class="name flex">
-<span>def <span class="ident">main</span></span>(<span>id: str, source: str = 'cbs', third_party: bool = False, config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a> = None)</span>
+<span>def <span class="ident">main</span></span>(<span>id: str, source: str = 'cbs', third_party: bool = False, config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a> = None, gcp_env: str = 'dev') ‑> NoneType</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -2867,21 +2977,47 @@ to use dataderden.cbs.nl as base url (not available in v4 yet).</dd>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def main(
-    id: str, source: str = &#34;cbs&#34;, third_party: bool = False, config: Config = None,
-):
-    print(f&#34;Processing dataset {id}&#34;)
-    odata_version = check_v4(id=id, third_party=third_party)
-    cbsodata_to_gbq(
-        id=id,
-        odata_version=odata_version,
-        third_party=third_party,
-        source=source,
-        config=config,
-    )
-    print(
-        f&#34;Completed dataset {id}&#34;
-    )  # TODO - add response from google if possible (some success/failure flag)
-    return None</code></pre>
+    id: str,
+    source: str = &#34;cbs&#34;,
+    third_party: bool = False,
+    config: Config = None,
+    gcp_env: str = &#34;dev&#34;,
+) -&gt; None:
+    gcp_env = gcp_env.lower()
+    if check_gcp_env(gcp_env):
+        print(f&#34;Processing dataset {id}&#34;)
+        odata_version = check_v4(id=id, third_party=third_party)
+        cbsodata_to_gbq(
+            id=id,
+            odata_version=odata_version,
+            third_party=third_party,
+            source=source,
+            config=config,
+            gcp_env=gcp_env,
+        )
+        print(
+            f&#34;Completed dataset {id}&#34;
+        )  # TODO - add response from google if possible (some success/failure flag)
+        return None</code></pre>
+</details>
+</dd>
+<dt id="statline_bq.utils.set_gcp"><code class="name flex">
+<span>def <span class="ident">set_gcp</span></span>(<span>config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a>, gcp_env: str) ‑> <a title="statline_bq.config.Gcp" href="config.html#statline_bq.config.Gcp">Gcp</a></span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def set_gcp(config: Config, gcp_env: str) -&gt; Gcp:
+    gcp_env = gcp_env.lower()
+    config_envs = {
+        &#34;dev&#34;: config.gcp.dev,
+        &#34;test&#34;: config.gcp.test,
+        &#34;prod&#34;: config.gcp.prod,
+    }
+    return config_envs[gcp_env]</code></pre>
 </details>
 </dd>
 <dt id="statline_bq.utils.tables_to_parquet"><code class="name flex">
@@ -2977,7 +3113,7 @@ to use dataderden.cbs.nl as base url (not available in v4 yet).</dd>
 </details>
 </dd>
 <dt id="statline_bq.utils.upload_to_gcs"><code class="name flex">
-<span>def <span class="ident">upload_to_gcs</span></span>(<span>dir: pathlib.Path, source: str = 'cbs', odata_version: str = None, id: str = None, config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a> = None)</span>
+<span>def <span class="ident">upload_to_gcs</span></span>(<span>dir: pathlib.Path, source: str = 'cbs', odata_version: str = None, id: str = None, config: <a title="statline_bq.config.Config" href="config.html#statline_bq.config.Config">Config</a> = None, gcp_env: str = None) ‑> str</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Uploads all files in a given directory to Google Cloud Storage.</p>
@@ -3002,6 +3138,10 @@ using "dataverbinders" as a bucket, would create the following:</p>
 <dd>version of the odata for this dataset - must be either "v3" or "v4".</dd>
 <dt><strong><code>id</code></strong> :&ensp;<code>str</code></dt>
 <dd>CBS Dataset id, i.e. "83583NED"</dd>
+<dt><strong><code>config</code></strong> :&ensp;<code>Config</code></dt>
+<dd>Config object holding GCP and local paths</dd>
+<dt><strong><code>gcp_env</code></strong> :&ensp;<code>str</code></dt>
+<dd>determines which GCP configuration to use from config.gcp</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <dl>
@@ -3018,7 +3158,8 @@ using "dataverbinders" as a bucket, would create the following:</p>
     odata_version: str = None,
     id: str = None,
     config: Config = None,
-):
+    gcp_env: str = None,
+) -&gt; str:  # TODO change the return value to some indication or id from Google?:
     &#34;&#34;&#34;Uploads all files in a given directory to Google Cloud Storage.
 
     This function is meant to be used for uploading all tables of a certain dataset retrieved from
@@ -3043,18 +3184,22 @@ using "dataverbinders" as a bucket, would create the following:</p>
         version of the odata for this dataset - must be either &#34;v3&#34; or &#34;v4&#34;.
     id: str
         CBS Dataset id, i.e. &#34;83583NED&#34;
+    config: Config
+        Config object holding GCP and local paths
+    gcp_env: str
+        determines which GCP configuration to use from config.gcp
+
 
     Returns
     -------
     gcs_folder: str
         The folder (=blob) into which the tables have been uploaded # TODO -&gt; Return success/ fail code?/job ID
     &#34;&#34;&#34;
-
-    # Initialize Google Storage Client, get bucket, set blob
-    gcs = storage.Client(
-        project=config.gcp.dev.project_id
-    )  # TODO -&gt; handle dev, test and prod appropriatley
-    gcs_bucket = gcs.get_bucket(config.gcp.dev.bucket)
+    # Initialize Google Storage Client and get bucket according to gcp_env
+    gcp = set_gcp(config=config, gcp_env=gcp_env)
+    gcs = storage.Client(project=gcp.project_id)
+    gcs_bucket = gcs.get_bucket(gcp.bucket)
+    # Set blob
     gcs_folder = (
         f&#34;{source}/{odata_version}/{id}/{datetime.today().date().strftime(&#39;%Y%m%d&#39;)}&#34;
     )
@@ -3171,6 +3316,7 @@ used for the tables, and placed in the directory accordingly, namely:</p>
 <ul class="">
 <li><code><a title="statline_bq.utils.cbsodata_to_gbq" href="#statline_bq.utils.cbsodata_to_gbq">cbsodata_to_gbq</a></code></li>
 <li><code><a title="statline_bq.utils.check_bq_dataset" href="#statline_bq.utils.check_bq_dataset">check_bq_dataset</a></code></li>
+<li><code><a title="statline_bq.utils.check_gcp_env" href="#statline_bq.utils.check_gcp_env">check_gcp_env</a></code></li>
 <li><code><a title="statline_bq.utils.check_v4" href="#statline_bq.utils.check_v4">check_v4</a></code></li>
 <li><code><a title="statline_bq.utils.convert_table_to_parquet" href="#statline_bq.utils.convert_table_to_parquet">convert_table_to_parquet</a></code></li>
 <li><code><a title="statline_bq.utils.create_bq_dataset" href="#statline_bq.utils.create_bq_dataset">create_bq_dataset</a></code></li>
@@ -3189,6 +3335,7 @@ used for the tables, and placed in the directory accordingly, namely:</p>
 <li><code><a title="statline_bq.utils.get_odata_v4_curl" href="#statline_bq.utils.get_odata_v4_curl">get_odata_v4_curl</a></code></li>
 <li><code><a title="statline_bq.utils.get_urls" href="#statline_bq.utils.get_urls">get_urls</a></code></li>
 <li><code><a title="statline_bq.utils.main" href="#statline_bq.utils.main">main</a></code></li>
+<li><code><a title="statline_bq.utils.set_gcp" href="#statline_bq.utils.set_gcp">set_gcp</a></code></li>
 <li><code><a title="statline_bq.utils.tables_to_parquet" href="#statline_bq.utils.tables_to_parquet">tables_to_parquet</a></code></li>
 <li><code><a title="statline_bq.utils.upload_to_gcs" href="#statline_bq.utils.upload_to_gcs">upload_to_gcs</a></code></li>
 <li><code><a title="statline_bq.utils.write_description_to_file" href="#statline_bq.utils.write_description_to_file">write_description_to_file</a></code></li>
