@@ -46,7 +46,7 @@ Correct nesting in config file:
     bucket = "my_prod_bucket"
     location = "EU"
 ```
-Addiotionally, the local paths used by the library can configured here. Under `[paths]` define the path to the library, and other temporary folders if desired.
+Additionally, the local paths used by the library can configured here. Under `[paths]` define the path to the library, and other temporary folders if desired.
 
 #### 2. Datasets through `datasets.toml`
 
