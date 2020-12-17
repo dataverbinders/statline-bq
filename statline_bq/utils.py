@@ -301,9 +301,12 @@ def get_column_descriptions_v3(url_data_properties: str) -> dict:
     col_desc = {item["Key"]: item["Description"] for item in data_properties}
     # If description exists, clean and truncate (BQ has 1024 chars limit)
     for k in col_desc:
-        col_desc[k] = col_desc[k].replace("\n", "").replace("\r", "")
-        if len(col_desc[k]) > 1023:
-            col_desc[k] = col_desc[k][:1020] + "..."
+        try:
+            col_desc[k] = col_desc[k].replace("\n", "").replace("\r", "")
+            if len(col_desc[k]) > 1023:
+                col_desc[k] = col_desc[k][:1020] + "..."
+        except:
+            pass
     return col_desc
 
 
