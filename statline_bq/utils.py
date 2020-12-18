@@ -5,14 +5,16 @@ from pathlib import Path
 from glob import glob
 import requests
 import json
-import dask.bag as db
 from datetime import datetime
+
+import dask.bag as db
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
 from google.cloud import storage
 from google.cloud import bigquery
-from statline_bq.config import Config, Gcp, GcpProject
 from google.api_core import exceptions
+
+from statline_bq.config import Config, Gcp, GcpProject
 
 
 def check_gcp_env(gcp_env: str, options: List[str] = ["dev", "test", "prod"]) -> bool:
