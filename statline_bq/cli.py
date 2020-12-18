@@ -1,7 +1,9 @@
+from pathlib import Path
+
 import click
+
 from statline_bq.utils import main
 from statline_bq.config import get_config, get_datasets
-from pathlib import Path
 
 
 @click.command()

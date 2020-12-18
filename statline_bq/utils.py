@@ -5,14 +5,16 @@ from pathlib import Path
 from glob import glob
 import requests
 import json
-import dask.bag as db
 from datetime import datetime
+
+import dask.bag as db
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
 from google.cloud import storage
 from google.cloud import bigquery
-from statline_bq.config import Config, Gcp
 from google.api_core import exceptions
+
+from statline_bq.config import Config, Gcp, GcpProject
 
 
 def check_gcp_env(gcp_env: str, options: List[str] = ["dev", "test", "prod"]) -> bool:
@@ -117,6 +119,11 @@ def get_dataset_description(urls: dict, odata_version: str) -> str:
     -------
     description: str
         The description of the dataset from CBS.
+
+    Raises
+    ------
+    ValueError
+        If odata_version is not "v3" or "v4"
 
     Examples
     --------
@@ -236,6 +243,120 @@ def write_description_to_file(
     with open(description_file, "w+") as f:
         f.write(description_text)
     return description_file
+
+
+def get_column_descriptions(urls: dict, odata_version: str) -> dict:
+    """Gets the column descriptions from CBS.
+
+    Wrapper function to call the correct version function which in turn gets
+    the dataset description according to the odata version: "v3" or "v4".
+
+    Parameters
+    ----------
+    urls: dict
+        Dictionary holding urls of the dataset from CBS.
+        NOTE: urls["????????"] (for v4) or urls["DataProperties"] (for v3)
+        must be present in order to access the dataset description.  #TODO: - Only implemented for V3. Implementation might differ for v4
+
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+
+    Returns
+    -------
+    dict
+        dict holding all coloumn descriptions for the dataset's main table
+
+    Raises
+    ------
+    ValueError
+        If odata_version is not "v3" or "v4"
+    """
+    if odata_version.lower() == "v4":
+        # Since odata v4 comes in a long format, this seems irrelevant #TODO: Verify
+        # column_descriptions = get_column_decriptions_v4(urls["Properties"])
+        return
+    elif odata_version.lower() == "v3":
+        column_descriptions = get_column_descriptions_v3(urls["DataProperties"])
+    else:
+        raise ValueError("odata version must be either 'v3' or 'v4'")
+    return column_descriptions
+
+
+def get_column_descriptions_v3(url_data_properties: str) -> dict:
+    """Gets the column descriptions for the TypedDataSet of a CBS dataset V3
+
+    Parameters
+    ----------
+    url_data_properties : str
+        The url for a dataset's "DataProperties" table as string.
+
+    Returns
+    -------
+    dict
+        All of the "TypedDataSet" column descriptions.
+    """
+    # Construct url to get json format
+    url_data_properties = "?".join((url_data_properties, "$format=json"))
+    # Load data properties into a dict
+    data_properties = requests.get(url_data_properties).json()["value"]
+    # Create new dict with only descriptions
+    col_desc = {item["Key"]: item["Description"] for item in data_properties}
+    # If description exists, clean and truncate (BQ has 1024 chars limit)
+    for k in col_desc:
+        try:
+            col_desc[k] = col_desc[k].replace("\n", "").replace("\r", "")
+            if len(col_desc[k]) > 1023:
+                col_desc[k] = col_desc[k][:1020] + "..."
+        except:
+            pass
+    return col_desc
+
+
+def write_col_decription_to_file(
+    id: str,
+    col_desc: dict,
+    pq_dir: Union[Path, str],
+    source: str = "cbs",
+    odata_version: str = None,
+) -> Path:
+    """Writes a dict with column descriptions as a json file.
+
+    Writes a dictionary with column descriptions into a json file and places that
+    file in a directory alongside the rest of that dataset's tables (assuming
+    it, and they exist). The file is named according to the same conventions
+    used for the tables, and placed in the directory accordingly, namely:
+
+        "{source}.{odata_version}.{id}_ColDescriptions.json"
+
+    for example:
+
+        "cbs.v3.83583NED_ColDescriptions.json"
+
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED"
+    col_desc: str
+        The dictionary holding the columnd descriptions.
+    pq_dir: Path or str
+        Path to directory where the file will be stored.
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        The version of the OData for this dataset - should be "v3" or "v4".
+
+    Returns
+    -------
+    description_file: Path
+        A path of the output txt file
+    """
+
+    col_desc_file = Path(pq_dir) / Path(
+        f"{source}.{odata_version}.{id}_ColDescriptions.json"
+    )
+    with open(col_desc_file, "w+") as f:
+        f.write(json.dumps(col_desc))
+    return col_desc_file
 
 
 # Currently not implemented. Possibly not needed.
@@ -603,6 +724,115 @@ def get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
     return file_names
 
 
+def bq_update_main_table_col_descriptions(
+    dataset_ref: str, descriptions: dict, config: Config = None, gcp_env: str = "dev"
+) -> bigquery.Table:
+    """Updates column descriptions of main table for existing BQ dataset
+
+    Parameters
+    ----------
+    dataset_ref : str
+        dataset reference where main table exists
+    descriptions : dict
+        dictionary holding column descriptions
+    gcp : Gcp,
+        Gcp object holding GCP configurations
+    gcp_env : str, default = "dev"
+        determines which GCP configuration to use from gcp
+
+    Returns
+    -------
+    bigquery.Table
+        The updated table
+    """
+
+    # Set GCP environmnet
+    gcp = config.gcp.__getattribute__(gcp_env)
+
+    # Construct a BigQuery client object.
+    client = bigquery.Client(project=gcp.project_id)
+
+    # Get all tables
+    tables = client.list_tables(dataset_ref)
+
+    # Set main_table as "TypedDataSet" reference  # This implementation allows flexibility in naming conventions, so long as "TypedDataset" is part of the table name(=id)
+    options = ["TypedDataSet", "typeddataset", "TypedDataset"]
+    for table in tables:
+        if any(option in table.table_id for option in options):
+            main_table_id = table.table_id
+            break
+
+    try:
+        # write as standard SQL format
+        main_table_id = dataset_ref.dataset_id + "." + main_table_id
+        main_table = client.get_table(main_table_id)
+    except UnboundLocalError:
+        print(
+            f"No table located with 'TypedDataset' in its name for dataset {dataset_ref}"
+        )
+        return None
+
+    # Create schema filed for column description
+    new_schema = []
+    for field in main_table.schema:
+        schema_dict = field.to_api_repr()
+        schema_dict["description"] = descriptions.get(schema_dict["name"])
+        new_schema.append(bigquery.SchemaField.from_api_repr(schema_dict))
+
+    main_table.schema = new_schema
+
+    table = client.update_table(main_table, ["schema"])
+
+    return table
+
+
+def get_col_descs_from_gcs(
+    id: str,
+    source: str = "cbs",
+    odata_version: str = None,
+    config: Config = None,
+    gcp_env: str = "dev",
+    gcs_folder: str = None,
+) -> dict:
+    """Gets previously uploaded dataset column descriptions from GCS.
+
+    The description should exist in the following file, under the following structure:
+
+        "{project}/{bucket}/{source}/{odata_version}/{id}/{YYYYMMDD}/{source}.{odata_version}.{id}_ColDescriptions.json"
+
+    For example:
+
+        "dataverbinders-dev/cbs/v4/83765NED/20201127/cbs.v4.83765NED_ColDescriptions.json"
+
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    gcp: Gcp
+        A Gcp Class object, holding GCP parameters
+    gcs_folder : str
+        The GCS folder holding the coloumn descriptions json file
+
+    Returns
+    -------
+    dict
+        Dictionary holding column descriptions
+    """
+    gcp = set_gcp(config, gcp_env)
+    client = storage.Client(project=gcp.project_id)
+    bucket = client.get_bucket(gcp.bucket)
+    blob = bucket.get_blob(
+        f"{gcs_folder}/{source}.{odata_version}.{id}_ColDescriptions.json"
+    )
+    json_text = blob.download_as_string().decode("utf-8")
+    col_desc = json.loads(json_text)
+    return col_desc
+
+
 def cbsodata_to_gbq(
     id: str,
     odata_version: str,
@@ -737,6 +967,16 @@ def cbsodata_to_gbq(
         source=source,
         odata_version=odata_version,
     )
+    # Get columnd descriptions from CBS
+    col_descriptions = get_column_descriptions(urls, odata_version=odata_version)
+    # Write description to json file and store in dataset directory with parquet tables
+    write_col_decription_to_file(
+        id=id,
+        col_desc=col_descriptions,
+        pq_dir=pq_dir,
+        source=source,
+        odata_version=odata_version,
+    )
 
     # Upload to GCS
     gcs_folder = upload_to_gcs(
@@ -751,7 +991,7 @@ def cbsodata_to_gbq(
     # Keep only names
     file_names = get_file_names(files_parquet)
     # Create table in GBQ
-    gcs_to_gbq(
+    dataset_ref = gcs_to_gbq(
         id=id,
         source=source,
         odata_version=odata_version,
@@ -760,6 +1000,24 @@ def cbsodata_to_gbq(
         file_names=file_names,
         gcp_env=gcp_env,
     )
+
+    gcp = set_gcp(config=config, gcp_env=gcp_env)
+    # Add column description to main table
+    desc_dict = get_col_descs_from_gcs(
+        id=id,
+        source=source,
+        odata_version=odata_version,
+        gcp=gcp,
+        gcs_folder=gcs_folder,
+    )
+    # desc_dict = {
+    #     "ID": "TEST 2",
+    #     "BedrijfstakkenBranchesSBI2008": "Description 1",
+    #     "Bedrijfsgrootte": "desc 2",
+    # }
+
+    if odata_version == "v3":
+        bq_update_main_table_col_descriptions(dataset_ref, desc_dict, config, gcp_env)
 
     return files_parquet  # TODO: return bq job ids
 
@@ -1190,7 +1448,7 @@ def gcs_to_gbq(
     # dataset_id = f"{source}_{odata_version}_{id}"
     dataset_ref = bigquery.DatasetReference(gcp.project_id, dataset_id)
 
-    # Loop over all files related to this dataset id
+    # Loop over all files related to this dataset id  #TODO: refactor as function(s)
     for name in file_names:
         # Configure the external data source per table id
         table_id = str(name).split(".")[2]
@@ -1207,7 +1465,7 @@ def gcs_to_gbq(
         table = client.create_table(
             table, exists_ok=True
         )  # BUG: error raised, using exists_ok=True to avoid
-    return None  # TODO Return job id
+    return dataset_ref  # TODO Return job id??
 
 
 def main(
