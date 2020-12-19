@@ -619,7 +619,21 @@ def convert_table_to_parquet(
     return pq_path
 
 
-def set_gcp(config: Config, gcp_env: str) -> Gcp:
+def set_gcp(config: Config, gcp_env: str) -> GcpProject:
+    """Sets the desired GCP donciguration
+
+    Parameters
+    ----------
+    config : Config
+        `statline_bq.config.Config` object
+    gcp_env : str
+        String representing the deierd environment between ['dev', 'test', 'prod']
+
+    Returns
+    -------
+    GcpProject
+        [description]
+    """
     gcp_env = gcp_env.lower()
     config_envs = {
         "dev": config.gcp.dev,
@@ -1456,7 +1470,7 @@ def gcs_to_gbq(
 
         external_config = bigquery.ExternalConfig("PARQUET")
         external_config.source_uris = [
-            f"https://storage.cloud.google.com/{gcp.bucket}/{gcs_folder}/{name}"  # TODO: Handle dev/test/prod?
+            f"https://storage.cloud.google.com/{gcp.bucket}/{gcs_folder}/{name}"
         ]
         table.external_data_configuration = external_config
         # table.description = description
