@@ -1048,8 +1048,8 @@ def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
 
     if odata_version == "v4":
         base_url = {
-            True: None,  # currently no IV3 links in ODATA V4,
-            False: f"https://odata4.cbs.nl/CBS/{id}",
+            "True": None,  # currently no IV3 links in ODATA V4,
+            "False": f"https://odata4.cbs.nl/CBS/{id}",
         }
         urls = {
             item["name"]: base_url[third_party] + "/" + item["url"]
@@ -1057,8 +1057,8 @@ def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
         }
     elif odata_version == "v3":
         base_url = {
-            True: f"https://dataderden.cbs.nl/ODataFeed/odata/{id}?$format=json",
-            False: f"https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json",
+            "True": f"https://dataderden.cbs.nl/ODataFeed/odata/{id}?$format=json",
+            "False": f"https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json",
         }
         urls = {
             item["name"]: item["url"]
