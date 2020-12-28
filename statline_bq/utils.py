@@ -743,7 +743,7 @@ def bq_update_main_table_col_descriptions(
     """
 
     # Set GCP environmnet
-    gcp = config.gcp.__getattribute__(gcp_env)
+    gcp = set_gcp(config=config, gcp_env=gcp_env)
 
     # Construct a BigQuery client object.
     client = bigquery.Client(project=gcp.project_id)
@@ -1012,7 +1012,7 @@ def cbsodata_to_gbq(
     return files_parquet  # TODO: return bq job ids
 
 
-def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
+def get_urls(id: str, odata_version: str, third_party: str = "False") -> dict:
     """Returns a dict with urls of all dataset tables given a valid CBS dataset id.
 
     Parameters
@@ -1023,7 +1023,7 @@ def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
 
-    third_party: bool, default=False
+    third_party: str, default="False"
         Flag to indicate dataset is not originally from CBS. Set to true
         to use dataderden.cbs.nl as base url (not available in v4 yet).
 
