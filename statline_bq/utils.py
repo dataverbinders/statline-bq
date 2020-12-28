@@ -561,7 +561,7 @@ def convert_table_to_parquet(
 
     # create directories to store files
     out_dir = Path(out_dir)
-    temp_json_dir = Path("./temp/json")
+    temp_json_dir = Path(f"temp/json/{file_name}")
     create_dir(temp_json_dir)
     create_dir(out_dir)
 
