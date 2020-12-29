@@ -619,7 +619,21 @@ def convert_table_to_parquet(
     return pq_path
 
 
-def set_gcp(config: Config, gcp_env: str) -> Gcp:
+def set_gcp(config: Config, gcp_env: str) -> GcpProject:
+    """Sets the desired GCP donciguration
+
+    Parameters
+    ----------
+    config : Config
+        `statline_bq.config.Config` object
+    gcp_env : str
+        String representing the deierd environment between ['dev', 'test', 'prod']
+
+    Returns
+    -------
+    GcpProject
+        [description]
+    """
     gcp_env = gcp_env.lower()
     config_envs = {
         "dev": config.gcp.dev,
@@ -1000,21 +1014,15 @@ def cbsodata_to_gbq(
         file_names=file_names,
         gcp_env=gcp_env,
     )
-
-    gcp = set_gcp(config=config, gcp_env=gcp_env)
     # Add column description to main table
     desc_dict = get_col_descs_from_gcs(
         id=id,
         source=source,
         odata_version=odata_version,
-        gcp=gcp,
+        config=config,
+        gcp_env=gcp_env,
         gcs_folder=gcs_folder,
     )
-    # desc_dict = {
-    #     "ID": "TEST 2",
-    #     "BedrijfstakkenBranchesSBI2008": "Description 1",
-    #     "Bedrijfsgrootte": "desc 2",
-    # }
 
     if odata_version == "v3":
         bq_update_main_table_col_descriptions(dataset_ref, desc_dict, config, gcp_env)
@@ -1456,7 +1464,7 @@ def gcs_to_gbq(
 
         external_config = bigquery.ExternalConfig("PARQUET")
         external_config.source_uris = [
-            f"https://storage.cloud.google.com/{gcp.bucket}/{gcs_folder}/{name}"  # TODO: Handle dev/test/prod?
+            f"https://storage.cloud.google.com/{gcp.bucket}/{gcs_folder}/{name}"
         ]
         table.external_data_configuration = external_config
         # table.description = description
