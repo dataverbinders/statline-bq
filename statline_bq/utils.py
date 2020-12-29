@@ -387,10 +387,7 @@ def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=
     bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
 
     # check if more data exists
-    if "@odata.nextLink" in r:
-        target_url = r["@odata.nextLink"]
-    else:
-        target_url = None
+    target_url = r.get("@odata.nextLink", None)
 
     # if more data exists continue to concat bag until complete
     while target_url:
@@ -401,10 +398,7 @@ def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=
         temp_bag = db.from_sequence(r["value"])
         bag = db.concat([bag, temp_bag])
 
-        if "@odata.nextLink" in r:
-            target_url = r["@odata.nextLink"]
-        else:
-            target_url = None
+        target_url = r.get("@odata.nextLink", None)
 
     return bag
 
@@ -478,10 +472,7 @@ def get_odata_v3(target_url: str) -> db:
         bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
 
     # check if more data exists
-    if "odata.nextLink" in r:
-        target_url = r["odata.nextLink"]
-    else:
-        target_url = None
+    target_url = r.get("odata.nextLink", None)
 
     # if more data exists continue to concat bag until complete
     while target_url:
@@ -490,10 +481,7 @@ def get_odata_v3(target_url: str) -> db:
             temp_bag = db.from_sequence(r["value"])
             bag = db.concat([bag, temp_bag])
 
-        if "odata.nextLink" in r:
-            target_url = r["odata.nextLink"]
-        else:
-            target_url = None
+        target_url = r.get("odata.nextLink", None)
 
     return bag
 
@@ -529,10 +517,7 @@ def get_odata_v4(target_url: str,) -> db:
     bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
 
     # check if more data exists
-    if "@odata.nextLink" in r:
-        target_url = r["@odata.nextLink"]
-    else:
-        target_url = None
+    target_url = r.get("@odata.nextLink", None)
 
     # if more data exists continue to concat bag until complete
     while target_url:
@@ -540,10 +525,7 @@ def get_odata_v4(target_url: str,) -> db:
         temp_bag = db.from_sequence(r["value"])
         bag = db.concat([bag, temp_bag])
 
-        if "@odata.nextLink" in r:
-            target_url = r["@odata.nextLink"]
-        else:
-            target_url = None
+        target_url = r.get("@odata.nextLink", None)
 
     return bag
 
