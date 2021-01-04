@@ -301,53 +301,6 @@ def get_dataset_description_v4(url_table_properties: str) -> str:
     return r["Description"]
 
 
-def write_description_to_file(
-    id: str,
-    description_text: str,
-    pq_dir: Union[Path, str],
-    source: str = "cbs",
-    odata_version: str = None,
-) -> Path:
-    """Writes a string into a text file at a given location.
-
-    Writes a dataset description string into a txt file and places that
-    file in a directory alongside the rest of that dataset's tables (assuming
-    it, and they exist). The file is named according to the same conventions
-    used for the tables, and placed in the directory accordingly, namely:
-
-        "{source}.{odata_version}.{id}_Description.txt"
-
-    for example:
-
-        "cbs.v3.83583NED_Description.txt"
-
-    Parameters
-    ----------
-    id: str
-        CBS Dataset id, i.e. "83583NED"
-    description_text: str
-        The dataset description text to be written into the file.
-    pq_dir: Path or str
-        Path to directory where the file will be stored.
-    source: str, default="cbs"
-        The source of the dataset. Currently only "cbs" is relevant.
-    odata_version: str
-        The version of the OData for this dataset - should be "v3" or "v4".
-
-    Returns
-    -------
-    description_file: Path
-        A path of the output txt file
-    """
-
-    description_file = Path(pq_dir) / Path(
-        f"{source}.{odata_version}.{id}_Description.txt"
-    )
-    with open(description_file, "w+") as f:
-        f.write(description_text)
-    return description_file
-
-
 def get_column_descriptions(urls: dict, odata_version: str) -> dict:
     """Gets the column descriptions from CBS.
 
@@ -413,53 +366,6 @@ def get_column_descriptions_v3(url_data_properties: str) -> dict:
         except:
             pass
     return col_desc
-
-
-def write_col_decription_to_file(
-    id: str,
-    col_desc: dict,
-    pq_dir: Union[Path, str],
-    source: str = "cbs",
-    odata_version: str = None,
-) -> Path:
-    """Writes a dict with column descriptions as a json file.
-
-    Writes a dictionary with column descriptions into a json file and places that
-    file in a directory alongside the rest of that dataset's tables (assuming
-    it, and they exist). The file is named according to the same conventions
-    used for the tables, and placed in the directory accordingly, namely:
-
-        "{source}.{odata_version}.{id}_ColDescriptions.json"
-
-    for example:
-
-        "cbs.v3.83583NED_ColDescriptions.json"
-
-    Parameters
-    ----------
-    id: str
-        CBS Dataset id, i.e. "83583NED"
-    col_desc: str
-        The dictionary holding the columnd descriptions.
-    pq_dir: Path or str
-        Path to directory where the file will be stored.
-    source: str, default="cbs"
-        The source of the dataset. Currently only "cbs" is relevant.
-    odata_version: str
-        The version of the OData for this dataset - should be "v3" or "v4".
-
-    Returns
-    -------
-    description_file: Path
-        A path of the output json file
-    """
-
-    col_desc_file = Path(pq_dir) / Path(
-        f"{source}.{odata_version}.{id}_ColDescriptions.json"
-    )
-    with open(col_desc_file, "w+") as f:
-        f.write(json.dumps(col_desc))
-    return col_desc_file
 
 
 # Currently not implemented. Possibly not needed.
@@ -1299,7 +1205,10 @@ def tables_to_parquet(
     # Create placeholders for storage
     files_parquet = set()
 
-    # Iterate over all tables related to dataset, excepet Properties (from v4), TableInfos (from v3) and UntypedDataset (from v3) (TODO -> double check that it is redundandt)
+    # Iterate over all tables related to dataset, except Metadata tables, that
+    # are handled earlier ("Properties" from v4 and "TableInfos" from v3) and
+    # UntypedDataset (from v3) which is redundant.
+
     for key, url in [
         (k, v)
         for k, v in urls.items()
@@ -1443,49 +1352,6 @@ def delete_bq_dataset(
     client.delete_dataset(dataset_id, delete_contents=True, not_found_ok=True)
 
     return None
-
-
-def get_description_from_gcs(
-    id: str,
-    source: str = "cbs",
-    odata_version: str = None,
-    gcp: Gcp = None,
-    gcs_folder: str = None,
-) -> str:
-    """Gets previsouly uploaded dataset description from GCS.
-
-    The description should exist in the following file, under the following structure:
-
-        "{project}/{bucket}/{source}/{odata_version}/{id}/{YYYYMMDD}/{source}.{odata_version}.{id}_Description"
-
-    For example:
-
-        "dataverbinders-dev/cbs/v4/83765NED/20201127/cbs.v4.83765NED_Description.txt"
-
-    Parameters
-    ----------
-    id: str
-        CBS Dataset id, i.e. "83583NED".
-    source: str, default="cbs"
-        The source of the dataset. Currently only "cbs" is relevant.
-    odata_version: str
-        version of the odata for this dataset - must be either "v3" or "v4".
-    gcp: Gcp
-        A Gcp Class object, holding GCP parameters
-    gcs_folder : str
-        The GCS folder holding the description txt file
-
-    Returns
-    -------
-    str
-        [description]
-    """
-    client = storage.Client(project=gcp.project_id)
-    bucket = client.get_bucket(gcp.bucket)
-    blob = bucket.get_blob(
-        f"{gcs_folder}/{source}.{odata_version}.{id}_Description.txt"
-    )
-    return str(blob.download_as_string().decode("utf-8"))
 
 
 def gcs_to_gbq(
