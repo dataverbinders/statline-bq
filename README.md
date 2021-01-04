@@ -64,7 +64,7 @@ statline-bq can be used via a command line, or imported as a library.
 Once the library is installed and configured:
 
 1. From your terminal, navigate to "my_path_to_library/statline-bq/statline_bq/"
-2. run `statline-bq`
+2. run `poetry run statline-bq`
 3. That's it!
 
 #### In a python script
