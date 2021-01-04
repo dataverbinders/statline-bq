@@ -86,11 +86,14 @@ def get_metadata_cbs(urls: dict, odata_version: str):
     return meta
 
 
-def get_latest_folder(gcs_folder: str, gcp: GcpProject) -> str:
+def get_latest_folder(gcs_folder: str, gcp: GcpProject) -> Union[str, None]:
     # Initialize Google stroage Client
     client = storage.Client(project=gcp.project_id)
     # Verify bucket
     bucket = client.get_bucket(gcp.bucket)
+    # Check if folder exists, return None otherwise
+    if len([blob.name for blob in bucket.list_blobs(prefix=gcs_folder)]) == 0:
+        return None
     # Get all blobs under prefix
     blobs = client.list_blobs(bucket, prefix=gcs_folder)
     # Get only dates of upload (before last item when splitting blob name)
@@ -104,29 +107,25 @@ def get_latest_folder(gcs_folder: str, gcp: GcpProject) -> str:
     return folder
 
 
-def get_metadata_gcp(id: str, source: str, odata_version: str, gcp: GcpProject) -> dict:
+def get_metadata_gcp(
+    id: str, source: str, odata_version: str, gcp: GcpProject
+) -> Union[dict, None]:
     # Initialize Google stroage Client
     client = storage.Client(project=gcp.project_id)
     # Verify bucket
     bucket = client.get_bucket(gcp.bucket)
     # Build top level GCS folder string
     gcs_folder = f"{source}/{odata_version}/{id}"
-    # Check if folder exists, return None otherwise
-    if len([blob.name for blob in bucket.list_blobs(prefix=gcs_folder)]) == 0:
+    # Add latest upload date to folder string
+    gcs_folder = get_latest_folder(gcs_folder, gcp)
+    # Get metadata json blob
+    blob = bucket.get_blob(f"{gcs_folder}/{source}.{odata_version}.{id}_Metadata.json")
+    try:
+        meta = json.loads(blob.download_as_string())
+        return meta
+    except AttributeError:
+        print("No Metadata exists in GCP - dataset will be processed")
         return None
-    else:
-        # Add latest uploda date to folder string
-        gcs_folder = get_latest_folder(gcs_folder, gcp)
-        # Get metadata json blob
-        blob = bucket.get_blob(
-            f"{gcs_folder}/{source}.{odata_version}.{id}_Metadata.json"
-        )
-        try:
-            meta = json.loads(blob.download_as_string())
-            return meta
-        except AttributeError:
-            print("No Metadata exists in GCP - dataset will be processed")
-            return None
 
 
 def dict_to_json_file(
@@ -1307,7 +1306,7 @@ def tables_to_parquet(
         if k
         not in (
             "Properties",
-            # "TableInfos",
+            "TableInfos",
             "UntypedDataSet",
         )  # Redundant tables from v3 AND v4
     ]:
@@ -1637,8 +1636,8 @@ if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    # main("83583NED", config=config, gcp_env="dev")
-    main("83765NED", config=config, gcp_env="dev")
+    main("83583NED", config=config, gcp_env="dev")
+    # main("83765NED", config=config, gcp_env="dev")
 
 # from statline_bq.config import get_config
 
