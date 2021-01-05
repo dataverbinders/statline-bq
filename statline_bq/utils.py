@@ -75,6 +75,187 @@ def check_v4(id: str, third_party: bool = False) -> str:
     return odata_version
 
 
+def get_metadata_cbs(urls: dict, odata_version: str) -> dict:
+    """Retrieves a dataset's metadata from cbs.
+
+    Parameters
+    ----------
+    urls : dict
+        A list of a dataset's tables' urls
+    odata_version : str
+        The version of the OData for this dataset - should be "v3" or "v4".
+
+    Returns
+    -------
+    dict
+        The dataset's metadata.
+
+    Raises
+    ------
+    ValueError
+        If odata_version is not "v3" or "v4"
+    """
+
+    if odata_version == "v3":
+        target_url = "?".join((urls["TableInfos"], "$format=json"))
+        meta = requests.get(target_url).json()["value"][0]
+    elif odata_version == "v4":
+        meta = requests.get(urls["Properties"]).json()
+    else:
+        raise ValueError("odata version must be either 'v3' or 'v4'")
+    return meta
+
+
+def get_latest_folder(gcs_folder: str, gcp: GcpProject) -> Union[str, None]:
+    """Returns the latest subfolder from a "folder" in GCP[^folders].
+    
+    This function assumes the folders are named with `project-id/cbs/[v3|v4]/dataset-id/YYYYMMDD`,
+    and that no further subfolders exist within a YYYYMMDD folder.
+    
+    For example, assuming the folder "cbs/v3/83583NED/" is populated with subfolders:
+
+    - "cbs/v3/83583NED/20191225"
+    - "cbs/v3/83583NED/20200102"
+    - "cbs/v3/83583NED/20200108"
+
+    the subfolder with the most recent date, "cbs/v3/83583NED/20200108" is returned.
+
+    Parameters
+    ----------
+    gcs_folder : str
+        The top level folder to traverse
+    gcp : GcpProject
+        A GcpProject class object holding GCP Project parameters (project id, bucket)
+
+    Returns
+    -------
+    folder : str or None
+        The Google Storage folder with the latest date
+
+    References
+    ----------
+    [^folders]: https://cloud.google.com/storage/docs/gsutil/addlhelp/HowSubdirectoriesWork
+    """
+
+    client = storage.Client(project=gcp.project_id)
+    bucket = client.get_bucket(gcp.bucket)
+    # Check if folder exists, return None otherwise
+    if not len([blob.name for blob in bucket.list_blobs(prefix=gcs_folder)]):
+        return None
+    blobs = client.list_blobs(bucket, prefix=gcs_folder)
+    dates = [blob.name.split("/")[-2] for blob in blobs]
+    dates = set(dates)
+    max_date = max(dates)
+    folder = f"{gcs_folder}/{max_date}"
+    return folder
+
+
+def get_metadata_gcp(
+    id: str, source: str, odata_version: str, gcp: GcpProject
+) -> Union[dict, None]:
+    """Gets a dataset's metadata from GCP.
+
+    This function assumes dataset's are uploaded to GCP using the following
+    naming convention: `project-id/cbs/[v3|v4]/dataset-id/YYYYMMDD`, and that
+    within these folders the dataset's metadata is a json file named
+    'cbs.[v3|v4].{dataset_id}_Metadata.json'. For example:
+    
+        - 'cbs.v3.83583NED_Metadata.json'
+
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    gcp : GcpProject
+        A GcpProject class object holding GCP Project parameters (project id, bucket)
+
+    Returns
+    -------
+    meta : dict or None
+        The metadata of the dataset if found. None otherwise.
+    """
+
+    client = storage.Client(project=gcp.project_id)
+    bucket = client.get_bucket(gcp.bucket)
+    gcs_folder = f"{source}/{odata_version}/{id}"
+    gcs_folder = get_latest_folder(gcs_folder, gcp)
+    blob = bucket.get_blob(f"{gcs_folder}/{source}.{odata_version}.{id}_Metadata.json")
+    try:
+        meta = json.loads(blob.download_as_string())
+        return meta
+    except AttributeError:
+        # print("No Metadata exists in GCP - dataset will be processed")
+        return None
+
+
+def dict_to_json_file(
+    id: str,
+    dict: dict,
+    dir: Union[Path, str],
+    suffix: str,
+    source: str = "cbs",
+    odata_version: str = None,
+) -> Path:
+    """Writes a dict as a json file.
+
+    Writes a dictionary into a json file and places that file in a directory
+    alongside the rest of that dataset's tables (assuming it, and they exist).
+    The file is named according to the same conventions used for the tables,
+    and placed in the directory accordingly, namely:
+
+        "{source}.{odata_version}.{id}_{suffix}.json"
+
+    for example:
+
+        "cbs.v3.83583NED_ColDescriptions.json"
+
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED"
+    dict: dict
+        The dictionary to be written as a json.
+    dir: Path or str
+        Path to directory where the file will be stored.
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        The version of the OData for this dataset - should be "v3" or "v4".
+
+    Returns
+    -------
+    json_file: Path
+        A path to the output json file
+    """
+
+    json_file = Path(dir) / Path(f"{source}.{odata_version}.{id}_{suffix}.json")
+    with open(json_file, "w+") as f:
+        f.write(json.dumps(dict))
+    return json_file
+
+
+def get_from_meta(meta: dict, key: str):
+    """Wrapper function to dict.get()
+
+    Parameters
+    ----------
+    meta : dict
+        A dictionary holding a dataset's parameters
+    key : str
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    return meta.get(key, None)
+
+
 def create_dir(path: Path) -> Path:
     """Checks whether a path exists and is a directory, and creates it if not.
 
@@ -198,53 +379,6 @@ def get_dataset_description_v4(url_table_properties: str) -> str:
     return r["Description"]
 
 
-def write_description_to_file(
-    id: str,
-    description_text: str,
-    pq_dir: Union[Path, str],
-    source: str = "cbs",
-    odata_version: str = None,
-) -> Path:
-    """Writes a string into a text file at a given location.
-
-    Writes a dataset description string into a txt file and places that
-    file in a directory alongside the rest of that dataset's tables (assuming
-    it, and they exist). The file is named according to the same conventions
-    used for the tables, and placed in the directory accordingly, namely:
-
-        "{source}.{odata_version}.{id}_Description.txt"
-
-    for example:
-
-        "cbs.v3.83583NED_Description.txt"
-
-    Parameters
-    ----------
-    id: str
-        CBS Dataset id, i.e. "83583NED"
-    description_text: str
-        The dataset description text to be written into the file.
-    pq_dir: Path or str
-        Path to directory where the file will be stored.
-    source: str, default="cbs"
-        The source of the dataset. Currently only "cbs" is relevant.
-    odata_version: str
-        The version of the OData for this dataset - should be "v3" or "v4".
-
-    Returns
-    -------
-    description_file: Path
-        A path of the output txt file
-    """
-
-    description_file = Path(pq_dir) / Path(
-        f"{source}.{odata_version}.{id}_Description.txt"
-    )
-    with open(description_file, "w+") as f:
-        f.write(description_text)
-    return description_file
-
-
 def get_column_descriptions(urls: dict, odata_version: str) -> dict:
     """Gets the column descriptions from CBS.
 
@@ -310,53 +444,6 @@ def get_column_descriptions_v3(url_data_properties: str) -> dict:
         except:
             pass
     return col_desc
-
-
-def write_col_decription_to_file(
-    id: str,
-    col_desc: dict,
-    pq_dir: Union[Path, str],
-    source: str = "cbs",
-    odata_version: str = None,
-) -> Path:
-    """Writes a dict with column descriptions as a json file.
-
-    Writes a dictionary with column descriptions into a json file and places that
-    file in a directory alongside the rest of that dataset's tables (assuming
-    it, and they exist). The file is named according to the same conventions
-    used for the tables, and placed in the directory accordingly, namely:
-
-        "{source}.{odata_version}.{id}_ColDescriptions.json"
-
-    for example:
-
-        "cbs.v3.83583NED_ColDescriptions.json"
-
-    Parameters
-    ----------
-    id: str
-        CBS Dataset id, i.e. "83583NED"
-    col_desc: str
-        The dictionary holding the columnd descriptions.
-    pq_dir: Path or str
-        Path to directory where the file will be stored.
-    source: str, default="cbs"
-        The source of the dataset. Currently only "cbs" is relevant.
-    odata_version: str
-        The version of the OData for this dataset - should be "v3" or "v4".
-
-    Returns
-    -------
-    description_file: Path
-        A path of the output txt file
-    """
-
-    col_desc_file = Path(pq_dir) / Path(
-        f"{source}.{odata_version}.{id}_ColDescriptions.json"
-    )
-    with open(col_desc_file, "w+") as f:
-        f.write(json.dumps(col_desc))
-    return col_desc_file
 
 
 # Currently not implemented. Possibly not needed.
@@ -836,6 +923,7 @@ def cbsodata_to_gbq(
     source: str = "cbs",
     config: Config = None,
     gcp_env: str = None,
+    force: bool = False,
 ) -> set:  # TODO change return value
     """Loads a CBS dataset as a dataset in Google BigQuery.
 
@@ -861,6 +949,13 @@ def cbsodata_to_gbq(
 
     config: Config object
         Config object holding GCP and local paths
+
+    gcp_env: str
+        determines which GCP configuration to use from config.gcp
+    
+    force : bool, default = False
+        If set to True, processes datasets, even if Modified dates are
+        identical in source and target locations.
 
     Returns
     -------
@@ -943,37 +1038,65 @@ def cbsodata_to_gbq(
     [^odatav4]: https://dataportal.cbs.nl/info/ontwikkelaars
     """
 
-    # Get all tablbe urls for given dataset id
+    # Set gcp environment
+    gcp = set_gcp(config, gcp_env)
+    # Get all table-specific urls for the given dataset id
     urls = get_urls(id=id, odata_version=odata_version, third_party=third_party)
+    # Get dataset metadata
+    source_meta = get_metadata_cbs(urls=urls, odata_version=odata_version)
+    gcp_meta = get_metadata_gcp(
+        id=id, source=source, odata_version=odata_version, gcp=gcp
+    )
+
+    ## Check if upload is needed
+    # Get dataset modified date from source metadata
+    cbs_modified = get_from_meta(meta=source_meta, key="Modified")
+    # Get datatset modified date from GCP metadata (set to None if force is True)
+    if not force:
+        try:
+            gcp_modified = get_from_meta(meta=gcp_meta, key="Modified")
+        except AttributeError:
+            gcp_modified = None
+    else:
+        gcp_modified = None
+    # Skip all process if modified date is the same in GCP and source (and Force is set to False)
+    if (cbs_modified is None or cbs_modified == gcp_modified) and (not force):
+        print(cbs_modified)
+        print(
+            f"Skipping dataset {id} because the same dataset exists on GCP, with the same 'Modified' date"
+        )
+        print(f"Dataset {id} source last modified: {cbs_modified}")
+        print(f"Dataset {id} gcp last modified: {gcp_modified}")
+        return None
+
     # Create directory to store parquest files locally
     pq_dir = create_named_dir(
         id=id, odata_version=odata_version, source=source, config=config
     )
-    # fetch each table from urls, convert to parquet and store locally
+    # Fetch each table from urls, convert to parquet and store locally
     files_parquet = tables_to_parquet(
         id=id, urls=urls, odata_version=odata_version, source=source, pq_dir=pq_dir
     )
-    # Get the description of the data set from CBS
-    description_text = get_dataset_description(urls, odata_version=odata_version)
-    # Write description text to txt file and store in dataset directory with parquet tables
-    write_description_to_file(
-        id=id,
-        description_text=description_text,
-        pq_dir=pq_dir,
-        source=source,
-        odata_version=odata_version,
-    )
-    # Get columnd descriptions from CBS
+    # Get columns' descriptions from CBS
     col_descriptions = get_column_descriptions(urls, odata_version=odata_version)
-    # Write description to json file and store in dataset directory with parquet tables
-    write_col_decription_to_file(
+    # Write column descriptions to json file and store in dataset directory with parquet tables
+    dict_to_json_file(
         id=id,
-        col_desc=col_descriptions,
-        pq_dir=pq_dir,
+        dict=col_descriptions,
+        dir=pq_dir,
+        suffix="ColDescriptions",
         source=source,
         odata_version=odata_version,
     )
-
+    # Write metadata to json file and store in dataset directory with parquet tables
+    dict_to_json_file(
+        id=id,
+        dict=source_meta,
+        dir=pq_dir,
+        suffix="Metadata",
+        source=source,
+        odata_version=odata_version,
+    )
     # Upload to GCS
     gcs_folder = upload_to_gcs(
         dir=pq_dir,
@@ -984,7 +1107,7 @@ def cbsodata_to_gbq(
         gcp_env=gcp_env,
     )
 
-    # Keep only names
+    # Keep only file names
     file_names = get_file_names(files_parquet)
     # Create table in GBQ
     dataset_ref = gcs_to_gbq(
@@ -1006,6 +1129,7 @@ def cbsodata_to_gbq(
         gcs_folder=gcs_folder,
     )
 
+    # Add column descriptions to main table (only relevant for v3, as v4 is a "long format")
     if odata_version == "v3":
         bq_update_main_table_col_descriptions(dataset_ref, desc_dict, config, gcp_env)
 
@@ -1159,7 +1283,10 @@ def tables_to_parquet(
     # Create placeholders for storage
     files_parquet = set()
 
-    # Iterate over all tables related to dataset, excepet Properties (from v4), TableInfos (from v3) and UntypedDataset (from v3) (TODO -> double check that it is redundandt)
+    # Iterate over all tables related to dataset, except Metadata tables, that
+    # are handled earlier ("Properties" from v4 and "TableInfos" from v3) and
+    # UntypedDataset (from v3) which is redundant.
+
     for key, url in [
         (k, v)
         for k, v in urls.items()
@@ -1305,49 +1432,6 @@ def delete_bq_dataset(
     return None
 
 
-def get_description_from_gcs(
-    id: str,
-    source: str = "cbs",
-    odata_version: str = None,
-    gcp: Gcp = None,
-    gcs_folder: str = None,
-) -> str:
-    """Gets previsouly uploaded dataset description from GCS.
-
-    The description should exist in the following file, under the following structure:
-
-        "{project}/{bucket}/{source}/{odata_version}/{id}/{YYYYMMDD}/{source}.{odata_version}.{id}_Description"
-
-    For example:
-
-        "dataverbinders-dev/cbs/v4/83765NED/20201127/cbs.v4.83765NED_Description.txt"
-
-    Parameters
-    ----------
-    id: str
-        CBS Dataset id, i.e. "83583NED".
-    source: str, default="cbs"
-        The source of the dataset. Currently only "cbs" is relevant.
-    odata_version: str
-        version of the odata for this dataset - must be either "v3" or "v4".
-    gcp: Gcp
-        A Gcp Class object, holding GCP parameters
-    gcs_folder : str
-        The GCS folder holding the description txt file
-
-    Returns
-    -------
-    str
-        [description]
-    """
-    client = storage.Client(project=gcp.project_id)
-    bucket = client.get_bucket(gcp.bucket)
-    blob = bucket.get_blob(
-        f"{gcs_folder}/{source}.{odata_version}.{id}_Description.txt"
-    )
-    return str(blob.download_as_string().decode("utf-8"))
-
-
 def gcs_to_gbq(
     id: str,
     source: str = "cbs",
@@ -1404,15 +1488,22 @@ def gcs_to_gbq(
     #     for blob in storage_client.list_blobs(gcp.dev.bucket, prefix=gcs_folder)
     #     if not blob.name.endswith(".txt")
     # ]
+
+    # Set GCP Environment
     gcp = set_gcp(config=config, gcp_env=gcp_env)
-    # Get description text from txt file
-    description = get_description_from_gcs(
-        id=id,
-        source=source,
-        odata_version=odata_version,
-        gcp=gcp,
-        gcs_folder=gcs_folder,
+    # Get metadata
+    meta_gcp = get_metadata_gcp(
+        id=id, source=source, odata_version=odata_version, gcp=gcp
     )
+    # Get dataset description
+    description = None
+    if meta_gcp:
+        if odata_version == "v3":
+            description = get_from_meta(meta_gcp, key="ShortDescription")
+        elif odata_version == "v4":
+            description = get_from_meta(meta_gcp, key="Description")
+        else:
+            raise ValueError("odata version must be either 'v3' or 'v4'")
 
     # Check if dataset exists and delete if it does TODO: maybe delete anyway (deleting uses not_found_ok to ignore error if does not exist)
     if check_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp):
@@ -1464,6 +1555,7 @@ def main(
     third_party: bool = False,
     config: Config = None,
     gcp_env: str = "dev",
+    force: bool = False,
 ) -> None:
     gcp_env = gcp_env.lower()
     if check_gcp_env(gcp_env):
@@ -1476,6 +1568,7 @@ def main(
             source=source,
             config=config,
             gcp_env=gcp_env,
+            force=force,
         )
         print(
             f"Completed dataset {id}"
@@ -1488,6 +1581,7 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     main("83583NED", config=config, gcp_env="dev")
+    # main("83765NED", config=config, gcp_env="dev")
 
 # from statline_bq.config import get_config
 

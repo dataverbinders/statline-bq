@@ -13,9 +13,14 @@ from statline_bq.config import get_config, get_datasets
     default="dev",
     help='Which gcp configuration to use - can take either "dev", "test" or "prod".',
 )
+@click.option(
+    "--force/--no-force",
+    default=False,
+    help="A flag that forces dataset processing even if the dataset's 'last_modified' metadata field is the same as the same dataset's metadata previously processesed.",
+)
 # @click.argument("config", type=click.File("r"))
 # @click.argument("dataset")
-def upload_datasets(gcp_env: str):
+def upload_datasets(gcp_env: str, force: bool):
     """
     This CLI uploads datasets from CBS to Google Cloud Platform.
 
@@ -50,5 +55,5 @@ def upload_datasets(gcp_env: str):
         click.echo(f"{i+1}. {dataset}")
     click.echo("")
     for id in datasets:
-        main(id=id, config=config, gcp_env=gcp_env)
+        main(id=id, config=config, gcp_env=gcp_env, force=force)
     click.echo("Finished processing datasets.")
