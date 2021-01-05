@@ -75,7 +75,27 @@ def check_v4(id: str, third_party: bool = False) -> str:
     return odata_version
 
 
-def get_metadata_cbs(urls: dict, odata_version: str):
+def get_metadata_cbs(urls: dict, odata_version: str) -> dict:
+    """Retrieves a dataset's metadata from cbs.
+
+    Parameters
+    ----------
+    urls : dict
+        A list of a dataset's tables' urls
+    odata_version : str
+        The version of the OData for this dataset - should be "v3" or "v4".
+
+    Returns
+    -------
+    dict
+        The dataset's metadata.
+
+    Raises
+    ------
+    ValueError
+        If odata_version is not "v3" or "v4"
+    """
+
     if odata_version == "v3":
         target_url = "?".join((urls["TableInfos"], "$format=json"))
         meta = requests.get(target_url).json()["value"][0]
@@ -87,22 +107,45 @@ def get_metadata_cbs(urls: dict, odata_version: str):
 
 
 def get_latest_folder(gcs_folder: str, gcp: GcpProject) -> Union[str, None]:
-    # Initialize Google stroage Client
+    """Returns the latest subfolder from a "folder" in GCP[^folders].
+    
+    This function assumes the folders are named with `project-id/cbs/[v3|v4]/dataset-id/YYYYMMDD`,
+    and that no further subfolders exist within a YYYYMMDD folder.
+    
+    For example, assuming the folder "cbs/v3/83583NED/" is populated with subfolders:
+
+    - "cbs/v3/83583NED/20191225"
+    - "cbs/v3/83583NED/20200102"
+    - "cbs/v3/83583NED/20200108"
+
+    the subfolder with the most recent date, "cbs/v3/83583NED/20200108" is returned.
+
+    Parameters
+    ----------
+    gcs_folder : str
+        The top level folder to traverse
+    gcp : GcpProject
+        A GcpProject class object holding GCP Project parameters (project id, bucket)
+
+    Returns
+    -------
+    folder : str or None
+        The Google Storage folder with the latest date
+
+    References
+    ----------
+    [^folders]: https://cloud.google.com/storage/docs/gsutil/addlhelp/HowSubdirectoriesWork
+    """
+
     client = storage.Client(project=gcp.project_id)
-    # Verify bucket
     bucket = client.get_bucket(gcp.bucket)
     # Check if folder exists, return None otherwise
-    if len([blob.name for blob in bucket.list_blobs(prefix=gcs_folder)]) == 0:
+    if not len([blob.name for blob in bucket.list_blobs(prefix=gcs_folder)]):
         return None
-    # Get all blobs under prefix
     blobs = client.list_blobs(bucket, prefix=gcs_folder)
-    # Get only dates of upload (before last item when splitting blob name)
     dates = [blob.name.split("/")[-2] for blob in blobs]
-    # keep unique only
     dates = set(dates)
-    # Get latest date
     max_date = max(dates)
-    # Add to gcs_folder
     folder = f"{gcs_folder}/{max_date}"
     return folder
 
@@ -110,21 +153,42 @@ def get_latest_folder(gcs_folder: str, gcp: GcpProject) -> Union[str, None]:
 def get_metadata_gcp(
     id: str, source: str, odata_version: str, gcp: GcpProject
 ) -> Union[dict, None]:
-    # Initialize Google stroage Client
+    """Gets a dataset's metadata from GCP.
+
+    This function assumes dataset's are uploaded to GCP using the following
+    naming convention: `project-id/cbs/[v3|v4]/dataset-id/YYYYMMDD`, and that
+    within these folders the dataset's metadata is a json file named
+    'cbs.[v3|v4].{dataset_id}_Metadata.json'. For example:
+    
+        - 'cbs.v3.83583NED_Metadata.json'
+
+    Parameters
+    ----------
+    id: str
+        CBS Dataset id, i.e. "83583NED".
+    source: str, default="cbs"
+        The source of the dataset. Currently only "cbs" is relevant.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
+    gcp : GcpProject
+        A GcpProject class object holding GCP Project parameters (project id, bucket)
+
+    Returns
+    -------
+    meta : dict or None
+        The metadata of the dataset if found. None otherwise.
+    """
+
     client = storage.Client(project=gcp.project_id)
-    # Verify bucket
     bucket = client.get_bucket(gcp.bucket)
-    # Build top level GCS folder string
     gcs_folder = f"{source}/{odata_version}/{id}"
-    # Add latest upload date to folder string
     gcs_folder = get_latest_folder(gcs_folder, gcp)
-    # Get metadata json blob
     blob = bucket.get_blob(f"{gcs_folder}/{source}.{odata_version}.{id}_Metadata.json")
     try:
         meta = json.loads(blob.download_as_string())
         return meta
     except AttributeError:
-        print("No Metadata exists in GCP - dataset will be processed")
+        # print("No Metadata exists in GCP - dataset will be processed")
         return None
 
 
@@ -175,6 +239,20 @@ def dict_to_json_file(
 
 
 def get_from_meta(meta: dict, key: str):
+    """Wrapper function to dict.get()
+
+    Parameters
+    ----------
+    meta : dict
+        A dictionary holding a dataset's parameters
+    key : str
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     return meta.get(key, None)
 
 
