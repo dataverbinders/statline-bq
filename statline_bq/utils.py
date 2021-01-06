@@ -188,7 +188,7 @@ def get_metadata_gcp(
         meta = json.loads(blob.download_as_string())
         return meta
     except AttributeError:
-        # print("No Metadata exists in GCP - dataset will be processed")
+        print("No Metadata exists in GCP - dataset will be processed")
         return None
 
 
@@ -254,6 +254,28 @@ def get_from_meta(meta: dict, key: str):
         [description]
     """
     return meta.get(key, None)
+
+
+def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
+    if not force:
+        try:
+            gcp_modified = get_from_meta(meta=gcp_meta, key="Modified")
+        except AttributeError:
+            gcp_modified = None
+    else:
+        gcp_modified = None
+    return gcp_modified
+
+
+# def skip_dataset():
+#     return False
+
+
+def skip_dataset(cbs_modified: str, gcp_modified: str, force: bool) -> bool:
+    if (cbs_modified is None or cbs_modified == gcp_modified) and (not force):
+        return True
+    else:
+        return False
 
 
 def create_dir(path: Path) -> Path:
@@ -1052,15 +1074,10 @@ def cbsodata_to_gbq(
     # Get dataset modified date from source metadata
     cbs_modified = get_from_meta(meta=source_meta, key="Modified")
     # Get datatset modified date from GCP metadata (set to None if force is True)
-    if not force:
-        try:
-            gcp_modified = get_from_meta(meta=gcp_meta, key="Modified")
-        except AttributeError:
-            gcp_modified = None
-    else:
-        gcp_modified = None
+    gcp_modified = get_gcp_modified(gcp_meta, force)
     # Skip all process if modified date is the same in GCP and source (and Force is set to False)
-    if (cbs_modified is None or cbs_modified == gcp_modified) and (not force):
+    if skip_dataset(cbs_modified, gcp_modified, force):
+        # if (cbs_modified is None or cbs_modified == gcp_modified) and (not force):
         print(cbs_modified)
         print(
             f"Skipping dataset {id} because the same dataset exists on GCP, with the same 'Modified' date"
@@ -1578,7 +1595,7 @@ if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    main("83583NED", config=config, gcp_env="dev")
+    main("83583NED", config=config, gcp_env="dev", force=True)
     # main("83765NED", config=config, gcp_env="dev")
 
 # from statline_bq.config import get_config
