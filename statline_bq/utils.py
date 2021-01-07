@@ -188,7 +188,7 @@ def get_metadata_gcp(
         meta = json.loads(blob.download_as_string())
         return meta
     except AttributeError:
-        print("No Metadata exists in GCP - dataset will be processed")
+        # print("No Metadata exists in GCP - dataset will be processed")
         return None
 
 
