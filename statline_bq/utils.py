@@ -43,7 +43,7 @@ def check_gcp_env(gcp_env: str, options: List[str] = ["dev", "test", "prod"]) ->
         return True
 
 
-def check_v4(id: str, third_party: bool = False) -> str:
+def check_v4(id: str, third_party: str = "False") -> str:
     """Checks whether a certain CBS table exists as OData Version "v4".
 
     Parameters
@@ -51,7 +51,7 @@ def check_v4(id: str, third_party: bool = False) -> str:
     id: str
         CBS Dataset id, i.e. "83583NED"
 
-    third_party: bool, default=False
+    third_party: str, default="False"
         Flag to indicate dataset is not originally from CBS. Set to true
         to use dataderden.cbs.nl as base url (not available in v4 yet).
 
@@ -62,8 +62,8 @@ def check_v4(id: str, third_party: bool = False) -> str:
     """
 
     base_url = {
-        True: None,  # currently no IV3 links in ODATA V4,
-        False: f"https://odata4.cbs.nl/CBS/{id}",
+        "True": None,  # currently no IV3 links in ODATA V4,
+        "False": f"https://odata4.cbs.nl/CBS/{id}",
     }
     r = requests.get(base_url[third_party])
     if (
@@ -648,7 +648,7 @@ def convert_table_to_parquet(
 
     # create directories to store files
     out_dir = Path(out_dir)
-    temp_json_dir = Path("./temp/json")
+    temp_json_dir = Path(f"temp/json/{file_name}")
     create_dir(temp_json_dir)
     create_dir(out_dir)
 
@@ -830,7 +830,7 @@ def bq_update_main_table_col_descriptions(
     """
 
     # Set GCP environmnet
-    gcp = config.gcp.__getattribute__(gcp_env)
+    gcp = set_gcp(config=config, gcp_env=gcp_env)
 
     # Construct a BigQuery client object.
     client = bigquery.Client(project=gcp.project_id)
@@ -919,7 +919,7 @@ def get_col_descs_from_gcs(
 def cbsodata_to_gbq(
     id: str,
     odata_version: str,
-    third_party: bool = False,
+    third_party: str = "False",
     source: str = "cbs",
     config: Config = None,
     gcp_env: str = None,
@@ -940,7 +940,7 @@ def cbsodata_to_gbq(
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
 
-    third_party: bool, default=False
+    third_party: str, default="False"
         Flag to indicate dataset is not originally from CBS. Set to true
         to use dataderden.cbs.nl as base url (not available in v4 yet).
 
@@ -1136,7 +1136,7 @@ def cbsodata_to_gbq(
     return files_parquet  # TODO: return bq job ids
 
 
-def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
+def get_urls(id: str, odata_version: str, third_party: str = "False") -> dict:
     """Returns a dict with urls of all dataset tables given a valid CBS dataset id.
 
     Parameters
@@ -1147,7 +1147,7 @@ def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
 
-    third_party: bool, default=False
+    third_party: str, default="False"
         Flag to indicate dataset is not originally from CBS. Set to true
         to use dataderden.cbs.nl as base url (not available in v4 yet).
 
@@ -1157,7 +1157,7 @@ def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
 
     Examples:
     >>> dataset_id = '83583NED'
-    >>> urls = get_urls(id=dataset_id, odata_version="v3", third_party=False)
+    >>> urls = get_urls(id=dataset_id, odata_version="v3", third_party="False")
     >>> for name, url in urls.items():
     ...     print(f"{name}: {url}")
     TableInfos: https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos
@@ -1172,8 +1172,8 @@ def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
 
     if odata_version == "v4":
         base_url = {
-            True: None,  # currently no IV3 links in ODATA V4,
-            False: f"https://odata4.cbs.nl/CBS/{id}",
+            "True": None,  # currently no IV3 links in ODATA V4,
+            "False": f"https://odata4.cbs.nl/CBS/{id}",
         }
         urls = {
             item["name"]: base_url[third_party] + "/" + item["url"]
@@ -1181,8 +1181,8 @@ def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
         }
     elif odata_version == "v3":
         base_url = {
-            True: f"https://dataderden.cbs.nl/ODataFeed/odata/{id}?$format=json",
-            False: f"https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json",
+            "True": f"https://dataderden.cbs.nl/ODataFeed/odata/{id}?$format=json",
+            "False": f"https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json",
         }
         urls = {
             item["name"]: item["url"]
@@ -1230,17 +1230,15 @@ def create_named_dir(
     >>> from statline_bq.config import get_config
     >>> id = "83583NED"
     >>> config = get_config("path/to/config.file")
-    >>> print(config.paths.root)
-    Projects/statline-bq
     >>> print(config.paths.temp)
     temp
     >>> dir = create_named_dir(id=id, odata_version="v3")
     >>> dir
-    PosixPath('/Users/{YOUR_USERNAME}/Projects/statline-bq/temp/cbs/v3/83583NED/20201214/parquet')
+    PosixPath('/Users/{YOUR_USERNAME}/statline-bq/temp/cbs/v3/83583NED/20201214/parquet')
     """
 
     # Get paths from config object
-    root = Path.home() / Path(config.paths.root)
+    root = Path(__file__).parent
     temp = root / Path(config.paths.temp)
     source_dir = temp / Path(getattr(config.paths, locals()["source"]))
 
@@ -1436,7 +1434,7 @@ def gcs_to_gbq(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
-    third_party: bool = False,
+    third_party: str = "False",
     config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
@@ -1456,7 +1454,7 @@ def gcs_to_gbq(
         The source of the dataset. Currently only "cbs" is relevant.
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
-    third_party : bool, default=False
+    third_party : str, default="False"
         Flag to indicate dataset is not originally from CBS. Set to true to use dataderden.cbs.nl as base url (not available in v4 yet).
     config : Config object
         Config object holding GCP and local paths.
@@ -1552,7 +1550,7 @@ def gcs_to_gbq(
 def main(
     id: str,
     source: str = "cbs",
-    third_party: bool = False,
+    third_party: str = "False",
     config: Config = None,
     gcp_env: str = "dev",
     force: bool = False,
