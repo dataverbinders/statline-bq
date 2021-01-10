@@ -43,7 +43,7 @@ def check_gcp_env(gcp_env: str, options: List[str] = ["dev", "test", "prod"]) ->
         return True
 
 
-def check_v4(id: str, third_party: str = "False") -> str:
+def check_v4(id: str, third_party: bool = False) -> str:
     """Checks whether a certain CBS table exists as OData Version "v4".
 
     Parameters
@@ -51,7 +51,7 @@ def check_v4(id: str, third_party: str = "False") -> str:
     id: str
         CBS Dataset id, i.e. "83583NED"
 
-    third_party: str, default="False"
+    third_party: bool, default=False
         Flag to indicate dataset is not originally from CBS. Set to true
         to use dataderden.cbs.nl as base url (not available in v4 yet).
 
@@ -62,8 +62,8 @@ def check_v4(id: str, third_party: str = "False") -> str:
     """
 
     base_url = {
-        "True": None,  # currently no IV3 links in ODATA V4,
-        "False": f"https://odata4.cbs.nl/CBS/{id}",
+        True: None,  # currently no IV3 links in ODATA V4,
+        False: f"https://odata4.cbs.nl/CBS/{id}",
     }
     r = requests.get(base_url[third_party])
     if (
@@ -254,6 +254,28 @@ def get_from_meta(meta: dict, key: str):
         [description]
     """
     return meta.get(key, None)
+
+
+def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
+    if not force:
+        try:
+            gcp_modified = get_from_meta(meta=gcp_meta, key="Modified")
+        except AttributeError:
+            gcp_modified = None
+    else:
+        gcp_modified = None
+    return gcp_modified
+
+
+# def skip_dataset():
+#     return False
+
+
+def skip_dataset(cbs_modified: str, gcp_modified: str, force: bool) -> bool:
+    if (cbs_modified is None or cbs_modified == gcp_modified) and (not force):
+        return True
+    else:
+        return False
 
 
 def create_dir(path: Path) -> Path:
@@ -919,7 +941,7 @@ def get_col_descs_from_gcs(
 def cbsodata_to_gbq(
     id: str,
     odata_version: str,
-    third_party: str = "False",
+    third_party: str = False,
     source: str = "cbs",
     config: Config = None,
     gcp_env: str = None,
@@ -940,7 +962,7 @@ def cbsodata_to_gbq(
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
 
-    third_party: str, default="False"
+    third_party: bool, default=False
         Flag to indicate dataset is not originally from CBS. Set to true
         to use dataderden.cbs.nl as base url (not available in v4 yet).
 
@@ -1052,15 +1074,10 @@ def cbsodata_to_gbq(
     # Get dataset modified date from source metadata
     cbs_modified = get_from_meta(meta=source_meta, key="Modified")
     # Get datatset modified date from GCP metadata (set to None if force is True)
-    if not force:
-        try:
-            gcp_modified = get_from_meta(meta=gcp_meta, key="Modified")
-        except AttributeError:
-            gcp_modified = None
-    else:
-        gcp_modified = None
+    gcp_modified = get_gcp_modified(gcp_meta, force)
     # Skip all process if modified date is the same in GCP and source (and Force is set to False)
-    if (cbs_modified is None or cbs_modified == gcp_modified) and (not force):
+    if skip_dataset(cbs_modified, gcp_modified, force):
+        # if (cbs_modified is None or cbs_modified == gcp_modified) and (not force):
         print(cbs_modified)
         print(
             f"Skipping dataset {id} because the same dataset exists on GCP, with the same 'Modified' date"
@@ -1136,7 +1153,7 @@ def cbsodata_to_gbq(
     return files_parquet  # TODO: return bq job ids
 
 
-def get_urls(id: str, odata_version: str, third_party: str = "False") -> dict:
+def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
     """Returns a dict with urls of all dataset tables given a valid CBS dataset id.
 
     Parameters
@@ -1147,7 +1164,7 @@ def get_urls(id: str, odata_version: str, third_party: str = "False") -> dict:
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
 
-    third_party: str, default="False"
+    third_party: bool, default=False
         Flag to indicate dataset is not originally from CBS. Set to true
         to use dataderden.cbs.nl as base url (not available in v4 yet).
 
@@ -1157,7 +1174,7 @@ def get_urls(id: str, odata_version: str, third_party: str = "False") -> dict:
 
     Examples:
     >>> dataset_id = '83583NED'
-    >>> urls = get_urls(id=dataset_id, odata_version="v3", third_party="False")
+    >>> urls = get_urls(id=dataset_id, odata_version="v3", third_party=False)
     >>> for name, url in urls.items():
     ...     print(f"{name}: {url}")
     TableInfos: https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos
@@ -1172,8 +1189,8 @@ def get_urls(id: str, odata_version: str, third_party: str = "False") -> dict:
 
     if odata_version == "v4":
         base_url = {
-            "True": None,  # currently no IV3 links in ODATA V4,
-            "False": f"https://odata4.cbs.nl/CBS/{id}",
+            True: None,  # currently no IV3 links in ODATA V4,
+            False: f"https://odata4.cbs.nl/CBS/{id}",
         }
         urls = {
             item["name"]: base_url[third_party] + "/" + item["url"]
@@ -1181,8 +1198,8 @@ def get_urls(id: str, odata_version: str, third_party: str = "False") -> dict:
         }
     elif odata_version == "v3":
         base_url = {
-            "True": f"https://dataderden.cbs.nl/ODataFeed/odata/{id}?$format=json",
-            "False": f"https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json",
+            True: f"https://dataderden.cbs.nl/ODataFeed/odata/{id}?$format=json",
+            False: f"https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json",
         }
         urls = {
             item["name"]: item["url"]
@@ -1434,7 +1451,7 @@ def gcs_to_gbq(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
-    third_party: str = "False",
+    third_party: bool = False,
     config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
@@ -1454,7 +1471,7 @@ def gcs_to_gbq(
         The source of the dataset. Currently only "cbs" is relevant.
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
-    third_party : str, default="False"
+    third_party : bool, default=False
         Flag to indicate dataset is not originally from CBS. Set to true to use dataderden.cbs.nl as base url (not available in v4 yet).
     config : Config object
         Config object holding GCP and local paths.
@@ -1550,7 +1567,7 @@ def gcs_to_gbq(
 def main(
     id: str,
     source: str = "cbs",
-    third_party: str = "False",
+    third_party: bool = False,
     config: Config = None,
     gcp_env: str = "dev",
     force: bool = False,
@@ -1578,7 +1595,7 @@ if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    main("83583NED", config=config, gcp_env="dev")
+    main("83583NED", config=config, gcp_env="dev", force=True)
     # main("83765NED", config=config, gcp_env="dev")
 
 # from statline_bq.config import get_config
