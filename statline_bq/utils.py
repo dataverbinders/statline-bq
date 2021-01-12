@@ -61,6 +61,10 @@ def check_v4(id: str, third_party: bool = False) -> str:
         "v4" if exists as odata v4, "v3" otherwise.
     """
 
+    # Third party ("dataderden..cbs.nl") do not have v4 implemenetd
+    if third_party:
+        return "v3"
+
     base_url = {
         True: None,  # currently no IV3 links in ODATA V4,
         False: f"https://odata4.cbs.nl/CBS/{id}",
@@ -670,7 +674,7 @@ def convert_table_to_parquet(
 
     # create directories to store files
     out_dir = Path(out_dir)
-    temp_json_dir = Path(f"temp/json/{file_name}")
+    temp_json_dir = out_dir.parent / Path(f"json/{file_name}")
     create_dir(temp_json_dir)
     create_dir(out_dir)
 
@@ -1595,8 +1599,16 @@ if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    main("83583NED", config=config, gcp_env="dev", force=True)
+    # main("83583NED", config=config, gcp_env="dev", force=True)
     # main("83765NED", config=config, gcp_env="dev")
+    main(
+        "40060NED",
+        source="mlz",
+        third_party=True,
+        config=config,
+        gcp_env="dev",
+        force=False,
+    )
 
 # from statline_bq.config import get_config
 
