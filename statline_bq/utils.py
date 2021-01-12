@@ -1577,6 +1577,7 @@ def main(
     force: bool = False,
 ) -> None:
     gcp_env = gcp_env.lower()
+    id = id.upper()
     if check_gcp_env(gcp_env):
         print(f"Processing dataset {id}")
         odata_version = check_v4(id=id, third_party=third_party)
@@ -1599,16 +1600,16 @@ if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    # main("83583NED", config=config, gcp_env="dev", force=True)
+    main("83583ned", config=config, gcp_env="dev", force=True)
     # main("83765NED", config=config, gcp_env="dev")
-    main(
-        "40060NED",
-        source="mlz",
-        third_party=True,
-        config=config,
-        gcp_env="dev",
-        force=False,
-    )
+    # main(
+    #     "40060NED",
+    #     source="mlz",
+    #     third_party=True,
+    #     config=config,
+    #     gcp_env="dev",
+    #     force=False,
+    # )
 
 # from statline_bq.config import get_config
 
