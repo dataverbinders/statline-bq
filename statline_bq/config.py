@@ -72,8 +72,6 @@ class Paths:
 
     Attributes
     ----------
-    root: str
-        The path leading to the local folder of 'statline-bq'
     temp: str
         A folder to usewhen writing to disk temporarly
     agb: str
@@ -84,14 +82,20 @@ class Paths:
         A folder to hold all cbs related data
     bag: str
         A folder to hold all bag related data
+    mlz: str
+        A folder to hold all mlz related data
+    rivm: str
+        A folder to hold all rivm related data
     """
 
-    root: str = None
+    # root: str = None
     temp: str = None
     agb: str = None
     vektis_open_data: str = None
     cbs: str = None
     bag: str = None
+    mlz: str = None
+    rivm: str = None
 
 
 @deserialize
