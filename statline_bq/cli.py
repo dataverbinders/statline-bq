@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from tomlkit.exceptions import NonExistentKey
 import click
 
 from statline_bq.utils import main
@@ -7,6 +8,10 @@ from statline_bq.config import get_config, get_datasets
 
 
 @click.command()
+@click.option(
+    "--dataset_id",
+    help="A valid CBS dataset id to be processed. If not provided, the ids will be taken from 'datasets.toml'",
+)
 @click.option(
     "--gcp-env",
     type=click.Choice(["dev", "test", "prod"], case_sensitive=False),
@@ -18,9 +23,7 @@ from statline_bq.config import get_config, get_datasets
     default=False,
     help="A flag that forces dataset processing even if the dataset's 'last_modified' metadata field is the same as the same dataset's metadata previously processesed.",
 )
-# @click.argument("config", type=click.File("r"))
-# @click.argument("dataset")
-def upload_datasets(gcp_env: str, force: bool):
+def upload_datasets(dataset_id: str, gcp_env: str, force: bool):
     """
     This CLI uploads datasets from CBS to Google Cloud Platform.
 
@@ -30,15 +33,27 @@ def upload_datasets(gcp_env: str, force: bool):
 
     The GCP settings, should be manually written into "config.toml".
 
-    The datasets sould be manually written into "datasets.toml".
+    To upload a single dataset, provide its dataset id as a parameter.
+    
+    To upload multiple datasets, their ids sould be manually written into
+    "datasets.toml".
 
     For further information, see the documentaion "????"
-    """
+    """  # TODO: provide link to documnetation
 
     config_path = Path("./config.toml")
     datasets_path = Path("./datasets.toml")
     config = get_config(config_path)
-    datasets = get_datasets(datasets_path)
+    if dataset_id:
+        datasets = [dataset_id]
+    else:
+        try:
+            datasets = get_datasets(datasets_path)
+        except NonExistentKey:
+            click.echo(
+                "No dataset ids were provided. Please enter a dataset id, either using either the '--dataset_id` parameter or by editing `datasets.toml`"
+            )
+            return
     gcp_env = gcp_env.lower()
     config_envs = {
         "dev": config.gcp.dev,
