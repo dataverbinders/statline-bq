@@ -13,6 +13,7 @@ import pyarrow.parquet as pq
 from google.cloud import storage
 from google.cloud import bigquery
 from google.api_core import exceptions
+from google.oauth2.credentials import Credentials
 
 from statline_bq.config import Config, Gcp, GcpProject
 
@@ -110,7 +111,9 @@ def get_metadata_cbs(urls: dict, odata_version: str) -> dict:
     return meta
 
 
-def get_latest_folder(gcs_folder: str, gcp: GcpProject) -> Union[str, None]:
+def get_latest_folder(
+    gcs_folder: str, gcp: GcpProject, credentials: Credentials = None
+) -> Union[str, None]:
     """Returns the latest subfolder from a "folder" in GCP[^folders].
     
     This function assumes the folders are named with `project-id/cbs/[v3|v4]/dataset-id/YYYYMMDD`,
@@ -141,7 +144,7 @@ def get_latest_folder(gcs_folder: str, gcp: GcpProject) -> Union[str, None]:
     [^folders]: https://cloud.google.com/storage/docs/gsutil/addlhelp/HowSubdirectoriesWork
     """
 
-    client = storage.Client(project=gcp.project_id)
+    client = storage.Client(project=gcp.project_id, credentials=credentials)
     bucket = client.get_bucket(gcp.bucket)
     # Check if folder exists, return None otherwise
     if not len([blob.name for blob in bucket.list_blobs(prefix=gcs_folder)]):
@@ -155,7 +158,11 @@ def get_latest_folder(gcs_folder: str, gcp: GcpProject) -> Union[str, None]:
 
 
 def get_metadata_gcp(
-    id: str, source: str, odata_version: str, gcp: GcpProject
+    id: str,
+    source: str,
+    odata_version: str,
+    gcp: GcpProject,
+    credentials: Credentials = None,
 ) -> Union[dict, None]:
     """Gets a dataset's metadata from GCP.
 
@@ -183,7 +190,7 @@ def get_metadata_gcp(
         The metadata of the dataset if found. None otherwise.
     """
 
-    client = storage.Client(project=gcp.project_id)
+    client = storage.Client(project=gcp.project_id, credentials=credentials)
     bucket = client.get_bucket(gcp.bucket)
     gcs_folder = f"{source}/{odata_version}/{id}"
     gcs_folder = get_latest_folder(gcs_folder, gcp)
@@ -269,10 +276,6 @@ def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
     else:
         gcp_modified = None
     return gcp_modified
-
-
-# def skip_dataset():
-#     return False
 
 
 def skip_dataset(cbs_modified: str, gcp_modified: str, force: bool) -> bool:
@@ -745,6 +748,7 @@ def upload_to_gcs(
     id: str = None,
     config: Config = None,
     gcp_env: str = None,
+    credentials: Credentials = None,
 ) -> str:  # TODO change the return value to some indication or id from Google?:
     """Uploads all files in a given directory to Google Cloud Storage.
 
@@ -783,7 +787,7 @@ def upload_to_gcs(
     """
     # Initialize Google Storage Client and get bucket according to gcp_env
     gcp = set_gcp(config=config, gcp_env=gcp_env)
-    gcs = storage.Client(project=gcp.project_id)
+    gcs = storage.Client(project=gcp.project_id, credentials=credentials)
     gcs_bucket = gcs.get_bucket(gcp.bucket)
     # Set blob
     gcs_folder = (
@@ -834,7 +838,11 @@ def get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
 
 
 def bq_update_main_table_col_descriptions(
-    dataset_ref: str, descriptions: dict, config: Config = None, gcp_env: str = "dev"
+    dataset_ref: str,
+    descriptions: dict,
+    config: Config = None,
+    gcp_env: str = "dev",
+    credentials: Credentials = None,
 ) -> bigquery.Table:
     """Updates column descriptions of main table for existing BQ dataset
 
@@ -859,7 +867,7 @@ def bq_update_main_table_col_descriptions(
     gcp = set_gcp(config=config, gcp_env=gcp_env)
 
     # Construct a BigQuery client object.
-    client = bigquery.Client(project=gcp.project_id)
+    client = bigquery.Client(project=gcp.project_id, credentials=credentials)
 
     # Get all tables
     tables = client.list_tables(dataset_ref)
@@ -881,7 +889,7 @@ def bq_update_main_table_col_descriptions(
         )
         return None
 
-    # Create schema filed for column description
+    # Create SchemaField for column description
     new_schema = []
     for field in main_table.schema:
         schema_dict = field.to_api_repr()
@@ -902,6 +910,7 @@ def get_col_descs_from_gcs(
     config: Config = None,
     gcp_env: str = "dev",
     gcs_folder: str = None,
+    credentials: Credentials = None,
 ) -> dict:
     """Gets previously uploaded dataset column descriptions from GCS.
 
@@ -932,7 +941,7 @@ def get_col_descs_from_gcs(
         Dictionary holding column descriptions
     """
     gcp = set_gcp(config, gcp_env)
-    client = storage.Client(project=gcp.project_id)
+    client = storage.Client(project=gcp.project_id, credentials=credentials)
     bucket = client.get_bucket(gcp.bucket)
     blob = bucket.get_blob(
         f"{gcs_folder}/{source}.{odata_version}.{id}_ColDescriptions.json"
@@ -950,6 +959,7 @@ def cbsodata_to_gbq(
     config: Config = None,
     gcp_env: str = None,
     force: bool = False,
+    credentials: Credentials = None,
 ) -> set:  # TODO change return value
     """Loads a CBS dataset as a dataset in Google BigQuery.
 
@@ -1071,7 +1081,11 @@ def cbsodata_to_gbq(
     # Get dataset metadata
     source_meta = get_metadata_cbs(urls=urls, odata_version=odata_version)
     gcp_meta = get_metadata_gcp(
-        id=id, source=source, odata_version=odata_version, gcp=gcp
+        id=id,
+        source=source,
+        odata_version=odata_version,
+        gcp=gcp,
+        credentials=credentials,
     )
 
     ## Check if upload is needed
@@ -1126,6 +1140,7 @@ def cbsodata_to_gbq(
         id=id,
         config=config,
         gcp_env=gcp_env,
+        credentials=credentials,
     )
 
     # Keep only file names
@@ -1139,6 +1154,7 @@ def cbsodata_to_gbq(
         gcs_folder=gcs_folder,
         file_names=file_names,
         gcp_env=gcp_env,
+        credentials=credentials,
     )
     # Add column description to main table
     desc_dict = get_col_descs_from_gcs(
@@ -1148,11 +1164,14 @@ def cbsodata_to_gbq(
         config=config,
         gcp_env=gcp_env,
         gcs_folder=gcs_folder,
+        credentials=credentials,
     )
 
     # Add column descriptions to main table (only relevant for v3, as v4 is a "long format")
     if odata_version == "v3":
-        bq_update_main_table_col_descriptions(dataset_ref, desc_dict, config, gcp_env)
+        bq_update_main_table_col_descriptions(
+            dataset_ref, desc_dict, config, gcp_env, credentials=credentials
+        )
 
     return files_parquet  # TODO: return bq job ids
 
@@ -1345,6 +1364,7 @@ def create_bq_dataset(
     odata_version: str = None,
     description: str = None,
     gcp: Gcp = None,
+    credentials: Credentials = None,
 ) -> str:
     """Creates a dataset in Google Big Query. If dataset exists already exists, does nothing.
 
@@ -1360,6 +1380,8 @@ def create_bq_dataset(
         The description of the dataset
     gcp: Gcp
         A Gcp Class object, holding GCP parameters
+    credentials : google.oauth2.credentials.Credentials
+        A GCP Credentials object to identify as a service account
 
     Returns:
     dataset.dataset_id: str
@@ -1367,7 +1389,7 @@ def create_bq_dataset(
     """
 
     # Construct a BigQuery client object.
-    client = bigquery.Client(project=gcp.project_id)
+    client = bigquery.Client(project=gcp.project_id, credentials=credentials)
 
     # Set dataset_id to the ID of the dataset to create.
     dataset_id = f"{client.project}.{source}_{odata_version}_{id}"
@@ -1393,19 +1415,31 @@ def create_bq_dataset(
         return dataset.dataset_id
 
 
-def check_bq_dataset(id: str, source: str, odata_version: str, gcp: Gcp = None) -> bool:
+def check_bq_dataset(
+    id: str,
+    source: str,
+    odata_version: str,
+    gcp: Gcp = None,
+    credentials: Credentials = None,
+) -> bool:
     """Check if dataset exists in BQ.
 
     Parameters:
-        - id (str): the dataset id, i.e. '83583NED'
-        - source (str): source to load data into
-        - odata_version (str): "v3" or "v4" indicating the version
-        - gcp (Gcp): a config object
+    id : str
+        The dataset id, i.e. '83583NED'
+    source : str
+        Source to load data into
+    odata_version : str
+        "v3" or "v4" indicating the version
+    gcp : Gcp
+        A Gcp object holding GCP parameters (i.e. project and bucket)
+    credentials : google.oauth2.credentials.Credentials
+        A GCP Credentials object to identify as a service account
 
     Returns:
         - True if exists, False if does not exists
     """
-    client = bigquery.Client(project=gcp.project_id)
+    client = bigquery.Client(project=gcp.project_id, credentials=credentials)
 
     dataset_id = f"{source}_{odata_version}_{id}"
 
@@ -1419,7 +1453,11 @@ def check_bq_dataset(id: str, source: str, odata_version: str, gcp: Gcp = None) 
 
 
 def delete_bq_dataset(
-    id: str, source: str = "cbs", odata_version: str = None, gcp: Gcp = None
+    id: str,
+    source: str = "cbs",
+    odata_version: str = None,
+    gcp: Gcp = None,
+    credentials: Credentials = None,
 ) -> None:
     """Delete an exisiting dataset from Google Big Query
 
@@ -1433,6 +1471,8 @@ def delete_bq_dataset(
         version of the odata for this dataset - must be either "v3" or "v4".
     gcp: Gcp
         A Gcp Class object, holding GCP parameters
+    credentials : google.oauth2.credentials.Credentials
+        A GCP Credentials object to identify as a service account
 
     Returns
     -------
@@ -1440,7 +1480,7 @@ def delete_bq_dataset(
     """
 
     # Construct a bq client
-    client = bigquery.Client(project=gcp.project_id)
+    client = bigquery.Client(project=gcp.project_id, credentials=credentials)
 
     # Set bq dataset id string
     dataset_id = f"{source}_{odata_version}_{id}"
@@ -1460,6 +1500,7 @@ def gcs_to_gbq(
     gcs_folder: str = None,
     file_names: list = None,
     gcp_env: str = None,
+    credentials: Credentials = None,
 ) -> None:  # TODO Return job id
     """Creates a BQ dataset and links all relevant tables from GCS underneath.
     
@@ -1512,7 +1553,11 @@ def gcs_to_gbq(
     gcp = set_gcp(config=config, gcp_env=gcp_env)
     # Get metadata
     meta_gcp = get_metadata_gcp(
-        id=id, source=source, odata_version=odata_version, gcp=gcp
+        id=id,
+        source=source,
+        odata_version=odata_version,
+        gcp=gcp,
+        credentials=credentials,
     )
     # Get dataset description
     description = None
@@ -1525,8 +1570,20 @@ def gcs_to_gbq(
             raise ValueError("odata version must be either 'v3' or 'v4'")
 
     # Check if dataset exists and delete if it does TODO: maybe delete anyway (deleting uses not_found_ok to ignore error if does not exist)
-    if check_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp):
-        delete_bq_dataset(id=id, source=source, odata_version=odata_version, gcp=gcp)
+    if check_bq_dataset(
+        id=id,
+        source=source,
+        odata_version=odata_version,
+        gcp=gcp,
+        credentials=credentials,
+    ):
+        delete_bq_dataset(
+            id=id,
+            source=source,
+            odata_version=odata_version,
+            gcp=gcp,
+            credentials=credentials,
+        )
 
     # Create a dataset in BQ
     dataset_id = create_bq_dataset(
@@ -1535,6 +1592,7 @@ def gcs_to_gbq(
         odata_version=odata_version,
         description=description,
         gcp=gcp,
+        credentials=credentials,
     )
     # if not existing:
     # Skip?
@@ -1542,7 +1600,7 @@ def gcs_to_gbq(
     # Handle existing dataset - delete and recreate? Repopulate? TODO
 
     # Initialize client
-    client = bigquery.Client(project=gcp.project_id)
+    client = bigquery.Client(project=gcp.project_id, credentials=credentials)
 
     # Configure the external data source
     # dataset_id = f"{source}_{odata_version}_{id}"
