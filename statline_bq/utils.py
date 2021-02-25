@@ -144,6 +144,32 @@ def get_metadata_cbs(id: str, third_party: bool, odata_version: str) -> dict:
     return meta
 
 
+def get_main_table_shape(metadata: dict) -> dict:
+    """Reads into a CBS dataset metadata and returns the main table's shape as a dict.
+
+    - For v3 odata, n_records and n_columns exist in the metadata
+    - For v4 odata, n_observations exist in the metadata.
+
+    This function returns a dict with all 3 keys, and sets non-existing values as None.
+
+    Parameters
+    ----------
+    metadata : dict
+        The dataset's metadata
+
+    Returns
+    -------
+    dict
+        The dataset's main table's shape
+    """
+    main_table_shape = {
+        "n_records": get_from_meta(metadata, "n_records"),
+        "n_columns": get_from_meta(metadata, "n_columns"),
+        "n_observations": get_from_meta(metadata, "ObservationCount"),
+    }
+    return main_table_shape
+
+
 def get_latest_folder(
     gcs_folder: str, gcp: GcpProject, credentials: Credentials = None
 ) -> Union[str, None]:
@@ -1018,11 +1044,7 @@ def cbsodata_to_gbq(
         id=id, odata_version=odata_version, source=source, config=config
     )
     # Set main table shape to use for parallel fetching later
-    main_table_shape = {
-        "n_records": get_from_meta(source_meta, "n_records"),
-        "n_columns": get_from_meta(source_meta, "n_columns"),
-        "n_observations": get_from_meta(source_meta, "ObservationCount"),
-    }
+    main_table_shape = get_main_table_shape(source_meta)
     # Fetch each table from urls, convert to parquet and store locally
     files_parquet = tables_to_parquet(
         id=id,
