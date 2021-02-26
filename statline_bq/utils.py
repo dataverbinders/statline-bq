@@ -1,14 +1,13 @@
-import subprocess
 from typing import Union, Iterable, List
-from os import remove, listdir, rmdir, PathLike
+from os import remove, listdir, PathLike
 from pathlib import Path
-from glob import glob
 import requests
 import json
-import ndjson
 from datetime import datetime
-import shutil
+from shutil import rmtree
 
+import ndjson
+import dask
 import dask.bag as db
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
@@ -107,38 +106,46 @@ def get_metadata_cbs(id: str, third_party: bool, odata_version: str) -> dict:
     ValueError
         If odata_version is not "v3" or "v4"
     """
+    catalog_urls = {
+        ("v3", True): "https://dataderden.cbs.nl/ODataCatalog/Tables?$format=json",
+        ("v3", False): "https://opendata.cbs.nl/ODataCatalog/Tables?$format=json",
+        ("v4", False): f"https://odata4.cbs.nl/CBS/{id}/properties",
+    }
     if odata_version == "v3":
-        catalog_urls = {
-            True: "https://dataderden.cbs.nl/ODataCatalog/Tables?$format=json",
-            False: "https://opendata.cbs.nl/ODataCatalog/Tables?$format=json",
-        }
-        url = catalog_urls[third_party]
+        url = catalog_urls[(odata_version, third_party)]
         params = {}
         params["$filter"] = f"Identifier eq '{id}'"
         tables = requests.get(url, params).json()["value"]
-        if len(tables) == 1:
-            meta = tables[0]
-        elif len(tables) == 0:
-            # TODO: HANDLE PROPERLY - is ValueError appropriate here?
-            raise ValueError(
-                "Dataset ID not found. Please enter a valid ID, and ensure third_paty is set appropriately"
-            )
+        if tables:
+            if len(tables) == 1:
+                meta = tables[0]
+            else:
+                pass
+                # TODO
+                # This means more then 1 result came back for the same ID - which is unlikely, and suggests a bug in the code more than anything.
         else:
-            # TODO: HANDLE PROPERLY - is ValueError appropriate here?
-            raise ValueError(
-                "Multiple matches on same dataset ID found. Please enter a valid ID, and ensure third_paty is set appropriately. Also, this is weird and should not happen."
-            )
+            pass
+            # TODO
+            # This means no results came back - a possible scenario that is likely due to misspelling, or the dataset does not exist.
+        # if len(tables) == 1:
+        #     meta = tables[0]
+        # elif len(tables) == 0:
+        #     # TODO: HANDLE PROPERLY - is ValueError appropriate here?
+        #     raise ValueError(
+        #         "Dataset ID not found. Please enter a valid ID, and ensure third_paty is set appropriately"
+        #     )
+        # else:
+        #     # TODO: HANDLE PROPERLY - is ValueError appropriate here?
+        #     raise ValueError(
+        #         "Multiple matches on same dataset ID found. Please enter a valid ID, and ensure third_paty is set appropriately. Also, this is weird and should not happen."
+        #     )
     elif odata_version == "v4":
         if third_party:
             # TODO: HANDLE PROPERLY - is ValueError appropriate here?
             raise ValueError(
                 "Third party datasets (IV3) using odata version v4 are not yet implemented in CBS."
             )
-        url = {
-            True: None,
-            False: f"https://odata4.cbs.nl/CBS/{id}/properties",
-        }  # TODO: Add third party V4 URL when one exists
-        meta = requests.get(url[third_party]).json()
+        meta = requests.get(catalog_urls[(odata_version, third_party)]).json()
     else:
         raise ValueError("odata version must be either 'v3' or 'v4'")
     return meta
@@ -534,7 +541,7 @@ def get_column_descriptions_v3(url_data_properties: str) -> dict:
     return col_desc
 
 
-def get_odata(table_urls: list) -> db:
+def get_odata(table_urls: list) -> dask.bag:
     """Create a dask.bag object holding all values of a table for a CBS dataset
 
     This functions maps `load_from_url()` on a list of urls, all related to a single
@@ -606,12 +613,17 @@ def convert_table_to_parquet(
     # File path to create as parquet file
     pq_path = Path(f"{out_dir}/{file_name}.parquet")
 
+    # # Convert bag to parquet #TODO: Check if this method is better then all the file handling below.
+    # # NOTE: this outputs a folder, named (i.e.) "cbs.v3.83583NED_TypedDataSet.parquet", and nests files underneath,
+    # # such as "part.0.parquet", as well as "_metadata" (can be avoided using `write_metadata_file=False`), and "_common_metadata".
+    # bag.to_dataframe().to_parquet(pq_path)
+
     # Dump each bag partition to json file
     print(f"Dumping bag to textfiles for {file_name}")
     bag.map(ndjson.dumps).to_textfiles(temp_json_dir / "*.json")
     print(f"Finished dumping bag to textfiles for {file_name}")
     # Get all json file names with path
-    filenames = sorted(glob(str(temp_json_dir) + "/*.json"))
+    filenames = [f for f in temp_json_dir.glob("*.json")]
     # Append all ndjsons into a single ndjson file
     print(f"Starting to concatanate files for {file_name}")
     with open(json_path, "w+") as json_file:
@@ -867,23 +879,6 @@ def get_col_descs_from_gcs(
     return col_desc
 
 
-def remove_dir(dir):
-    """Wrapper for shutil.rmtree
-
-    Parameters
-    ----------
-    dir : Pathlike
-        Directory to be completely removed recursively
-
-    Returns
-    -------
-    None
-    """
-
-    shutil.rmtree(dir)
-    return None
-
-
 def cbsodata_to_gbq(
     id: str,
     odata_version: str,
@@ -1117,7 +1112,7 @@ def cbsodata_to_gbq(
         )
 
     # Remove all local files for this process
-    remove_dir(pq_dir.parent)
+    rmtree(pq_dir.parent)
 
     return files_parquet  # TODO: return bq job ids
 
@@ -1392,7 +1387,12 @@ def tables_to_parquet(
             print(
                 f"Starting convert_table_to_parquet for table {table_name}"
             )  # TODO Convert to logging, add pq_dir to INFO
-            pq_path = convert_table_to_parquet(table, table_name, pq_dir, odata_version)
+            pq_path = convert_table_to_parquet(
+                bag=table,
+                file_name=table_name,
+                out_dir=pq_dir,
+                odata_version=odata_version,
+            )
             print()
             print(f"Finished convert_table_to_parquet for table {table_name}")
 
@@ -1704,7 +1704,7 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    main("83583ned", config=config, gcp_env="dev", force=True)
+    main("83583NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
     # main("83765NED", config=config, gcp_env="dev", force=True)
     # Test IV3 dataset, odata_version is v3
