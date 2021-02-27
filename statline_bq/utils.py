@@ -5,9 +5,10 @@ import requests
 import json
 from datetime import datetime
 from shutil import rmtree
+from tempfile import gettempdir
 
 import ndjson
-import dask
+from dask.bag import Bag as DaskBag
 import dask.bag as db
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
@@ -124,21 +125,9 @@ def get_metadata_cbs(id: str, third_party: bool, odata_version: str) -> dict:
                 # TODO
                 # This means more then 1 result came back for the same ID - which is unlikely, and suggests a bug in the code more than anything.
         else:
-            pass
-            # TODO
-            # This means no results came back - a possible scenario that is likely due to misspelling, or the dataset does not exist.
-        # if len(tables) == 1:
-        #     meta = tables[0]
-        # elif len(tables) == 0:
-        #     # TODO: HANDLE PROPERLY - is ValueError appropriate here?
-        #     raise ValueError(
-        #         "Dataset ID not found. Please enter a valid ID, and ensure third_paty is set appropriately"
-        #     )
-        # else:
-        #     # TODO: HANDLE PROPERLY - is ValueError appropriate here?
-        #     raise ValueError(
-        #         "Multiple matches on same dataset ID found. Please enter a valid ID, and ensure third_paty is set appropriately. Also, this is weird and should not happen."
-        #     )
+            raise KeyError(
+                "Dataset ID not found. Please enter a valid ID, and ensure third_paty is set appropriately"
+            )
     elif odata_version == "v4":
         if third_party:
             # TODO: HANDLE PROPERLY - is ValueError appropriate here?
@@ -541,7 +530,7 @@ def get_column_descriptions_v3(url_data_properties: str) -> dict:
     return col_desc
 
 
-def get_odata(table_urls: list) -> dask.bag:
+def get_odata(table_urls: list) -> DaskBag:
     """Create a dask.bag object holding all values of a table for a CBS dataset
 
     This functions maps `load_from_url()` on a list of urls, all related to a single
@@ -1220,12 +1209,12 @@ def create_named_dir(
     PosixPath('/Users/{YOUR_USERNAME}/statline-bq/temp/cbs/v3/83583NED/20201214/parquet')
     """
 
-    # Get paths from config object
-    root = Path(__file__).parent
-    temp = root / Path(config.paths.temp)
+    # Create "source" dir if does not exist
+    temp = Path(gettempdir())
     source_dir = temp / Path(getattr(config.paths, locals()["source"]))
 
-    # Create placeholders for storage
+    # Create dataset dir for where final files (i.e. parqeut) will be stored (this is the folder to be eventually uploaded to GCS)
+    # TODO: Consider taking the "parquet" string as parameter - it should not be embedded, as this function is general in nature (although currently used only once).
     path = source_dir / Path(
         f"{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
