@@ -9,7 +9,7 @@ from statline_bq.config import get_config, get_datasets
 
 @click.command()
 @click.option(
-    "--dataset_id",
+    "--dataset-id",
     help="A valid CBS dataset id to be processed. If not provided, the ids will be taken from 'datasets.toml'",
 )
 @click.option(

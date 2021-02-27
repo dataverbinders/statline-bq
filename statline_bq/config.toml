@@ -21,12 +21,10 @@
                         # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
     
 [paths]
-# Temporary paths to use for transformations are defined here.
+# Temporary folders are defined here.
+# Every source must be defined here, or an error is thrown. #TODO: Make this better
+# All folders are nested under the local temp folder, taken by `tempfile.gettempdir()`
 
-# temp folder is relative to "Path(__file__).parent"
-temp = "temp"
-
-# All other folders are nested under temp
 cbs = "cbs"
 mlz = "mlz"
 rivm = "rivm"

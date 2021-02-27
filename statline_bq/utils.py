@@ -1,12 +1,14 @@
-import subprocess
 from typing import Union, Iterable, List
-from os import remove, listdir, rmdir, PathLike
+from os import remove, listdir, PathLike
 from pathlib import Path
-from glob import glob
 import requests
 import json
 from datetime import datetime
+from shutil import rmtree
+from tempfile import gettempdir
 
+import ndjson
+from dask.bag import Bag as DaskBag
 import dask.bag as db
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
@@ -80,13 +82,18 @@ def check_v4(id: str, third_party: bool = False) -> str:
     return odata_version
 
 
-def get_metadata_cbs(urls: dict, odata_version: str) -> dict:
+def get_metadata_cbs(id: str, third_party: bool, odata_version: str) -> dict:
     """Retrieves a dataset's metadata from cbs.
 
     Parameters
     ----------
-    urls : dict
-        A list of a dataset's tables' urls
+    id: str
+        CBS Dataset id, i.e. "83583NED"
+
+    third_party: bool, default=False
+        Flag to indicate dataset is not originally from CBS. Set to true
+        to use dataderden.cbs.nl as base url (not available in v4 yet).
+
     odata_version : str
         The version of the OData for this dataset - should be "v3" or "v4".
 
@@ -100,15 +107,63 @@ def get_metadata_cbs(urls: dict, odata_version: str) -> dict:
     ValueError
         If odata_version is not "v3" or "v4"
     """
-
+    catalog_urls = {
+        ("v3", True): "https://dataderden.cbs.nl/ODataCatalog/Tables?$format=json",
+        ("v3", False): "https://opendata.cbs.nl/ODataCatalog/Tables?$format=json",
+        ("v4", False): f"https://odata4.cbs.nl/CBS/{id}/properties",
+    }
     if odata_version == "v3":
-        target_url = "?".join((urls["TableInfos"], "$format=json"))
-        meta = requests.get(target_url).json()["value"][0]
+        url = catalog_urls[(odata_version, third_party)]
+        params = {}
+        params["$filter"] = f"Identifier eq '{id}'"
+        tables = requests.get(url, params).json()["value"]
+        if tables:
+            if len(tables) == 1:
+                meta = tables[0]
+            else:
+                pass
+                # TODO
+                # This means more then 1 result came back for the same ID - which is unlikely, and suggests a bug in the code more than anything.
+        else:
+            raise KeyError(
+                "Dataset ID not found. Please enter a valid ID, and ensure third_paty is set appropriately"
+            )
     elif odata_version == "v4":
-        meta = requests.get(urls["Properties"]).json()
+        if third_party:
+            # TODO: HANDLE PROPERLY - is ValueError appropriate here?
+            raise ValueError(
+                "Third party datasets (IV3) using odata version v4 are not yet implemented in CBS."
+            )
+        meta = requests.get(catalog_urls[(odata_version, third_party)]).json()
     else:
         raise ValueError("odata version must be either 'v3' or 'v4'")
     return meta
+
+
+def get_main_table_shape(metadata: dict) -> dict:
+    """Reads into a CBS dataset metadata and returns the main table's shape as a dict.
+
+    - For v3 odata, n_records and n_columns exist in the metadata
+    - For v4 odata, n_observations exist in the metadata.
+
+    This function returns a dict with all 3 keys, and sets non-existing values as None.
+
+    Parameters
+    ----------
+    metadata : dict
+        The dataset's metadata
+
+    Returns
+    -------
+    dict
+        The dataset's main table's shape
+    """
+    main_table_shape = {
+        "n_records": get_from_meta(metadata, "n_records"),
+        "n_columns": get_from_meta(metadata, "n_columns"),
+        "n_observations": get_from_meta(metadata, "ObservationCount"),
+    }
+    return main_table_shape
 
 
 def get_latest_folder(
@@ -470,184 +525,45 @@ def get_column_descriptions_v3(url_data_properties: str) -> dict:
             col_desc[k] = col_desc[k].replace("\n", "").replace("\r", "")
             if len(col_desc[k]) > 1023:
                 col_desc[k] = col_desc[k][:1020] + "..."
-        except:
+        except:  # TODO: Handle better?
             pass
     return col_desc
 
 
-# Currently not implemented. Possibly not needed.
-def get_odata_v4_curl(  # TODO -> CURL command does not process url with ?$skip=100000 ath the end - returns same data as first link
-    target_url: str,
-):  # TODO -> How to define Bag for type hinting? (https://docs.python.org/3/library/typing.html#newtype)
-    """Retrieves a table from a specific url for CBS Odata v4.
+def get_odata(table_urls: list) -> DaskBag:
+    """Create a dask.bag object holding all values of a table for a CBS dataset
+
+    This functions maps `load_from_url()` on a list of urls, all related to a single
+    CBS table, from a specific dataset. Since requests to CBS are limited at 10,000
+    rows (=observations/records), the table_urls consists of the same base url, each ending with "$?SKIP={i}",
+    where i is an integer with multiples of 10,000, i.e.:
+
+    [
+        "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json",
+        "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json&$skip=10000"
+        "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json&$skip=20000"
+        ...
+        ...
+    ]
 
     Parameters
     ----------
-    url_table_properties: str
-        The url of the desired table
-
-    Returns
-    -------
-    data: Dask bag
-        All data received from target url as json type, in a Dask bag
-    """
-
-    # First call target url and get json formatted response as dict
-    temp_file = "odata.json"
-    # r = requests.get(target_url).json()
-    subprocess.run(["curl", "-fL", "-o", temp_file, target_url])
-    # Parse json file as dict
-    with open(temp_file) as f:
-        r = json.load(f)
-    # Create Dask bag from dict
-    bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
-
-    # check if more data exists
-    target_url = r.get("@odata.nextLink", None)
-
-    # if more data exists continue to concat bag until complete
-    while target_url:
-        subprocess.run(["curl", "-fL", "-o", temp_file, target_url])
-        # Parse json file as dict
-        with open(temp_file) as f:
-            r = json.load(f)
-        temp_bag = db.from_sequence(r["value"])
-        bag = db.concat([bag, temp_bag])
-
-        target_url = r.get("@odata.nextLink", None)
-
-    return bag
-
-
-def get_odata(target_url: str, odata_version: str) -> db:
-    """Gets a table from a valid CBS url and returns it as a Dask bag.
-
-    A wrapper, calling the appropriate version function to get the table from
-    a valid CBS url, leading to a table in OData format.
-
-    Parameters
-    ----------
-    target_url : str
-        A url to the table
-    odata_version : str
-        version of the odata for this dataset - must be either "v3" or "v4".
-
-    Returns
-    -------
-    Dask Bag
-        All data received from target url as json type, concatenated in a Dask Bag
-
-    Raises
-    ------
-    ValueError
-        If 'odata_version` is not one of {"v3", "v4"}
-    """
-
-    if odata_version == "v4":
-        return get_odata_v4(target_url)
-    elif odata_version == "v3":
-        return get_odata_v3(target_url)
-    else:
-        raise ValueError("odata version must be either 'v3' or 'v4'")
-
-
-def get_odata_v3(target_url: str) -> db:
-    """Gets a table from a valid url for CBS dataset with Odata v3.
-
-    This function uses standard requests.get() to retrieve data at target_url
-    in json format, and concats it all into a Dask Bag to handle memory
-    overflow if needed.
-
-    Each request from CBS is limited to 10,000 rows, and if more data exists
-    the key "odata.nextLink" exists in the response with the link to the next
-    10,000 (or less) rows.
-
-    Meant to be wrapped by `get_odata()`, and it is better practice to call it
-    wrapped to allow for both "v3" and "v4" functionality.
-
-    Parameters
-    ----------
-    target_url: str
-        A valid url of a table from CBS
+    table_urls: list of str
+        A list of valid urls of a table from CBS
 
     Returns
     -------
     bag: Dask Bag
-        All data received from target url as json type, concatenated as a Dask bag
+        The values included in table_urls as json type, as a single Dask bag
     """
-
-    print(f"Fetching from {target_url}")
-    # First call target url and get json formatted response as dict
-    r = requests.get(target_url).json()
-
-    # Initialize bag as None
-    bag = None
-
-    # Create Dask bag from dict (check if not empty field)
-    if r["value"]:
-        bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
-
-    # check if more data exists
-    target_url = r.get("odata.nextLink", None)
-
-    # if more data exists continue to concat bag until complete
-    while target_url:
-        r = requests.get(target_url).json()
-        if r["value"]:
-            temp_bag = db.from_sequence(r["value"])
-            bag = db.concat([bag, temp_bag])
-
-        target_url = r.get("odata.nextLink", None)
-
-    return bag
-
-
-def get_odata_v4(target_url: str,) -> db:
-    """Gets a table from a specific url for CBS Odata v4.
-    This function uses standard requests.get() to retrieve data at target_url
-    in json format, and concats it all into a Dask Bag to handle memory
-    overflow if needed.
-
-    Each request from CBS is limited to 10,000 rows, and if more data exists
-    the key "@odata.nextLink" exists in the response with the link to the next
-    10,000 (or less) rows.
-
-    Meant to be wrapped by `get_odata()`, and it is better practice to call it
-    wrapped to allow for both "v3" and "v4" functionality.
-
-    Parameters
-    ----------
-    target_url: str
-        A valid url of a table from CBS
-
-    Returns
-    -------
-    bag: Dask Bag
-        All data received from target url as json type, concatenated as a Dask bag
-    """
-
-    print(f"Fetching from {target_url}")
-    # First call target url and get json formatted response as dict
-    r = requests.get(target_url).json()
-    # Create Dask bag from dict
-    bag = db.from_sequence(r["value"])  # TODO -> define npartitions?
-
-    # check if more data exists
-    target_url = r.get("@odata.nextLink", None)
-
-    # if more data exists continue to concat bag until complete
-    while target_url:
-        r = requests.get(target_url).json()
-        temp_bag = db.from_sequence(r["value"])
-        bag = db.concat([bag, temp_bag])
-
-        target_url = r.get("@odata.nextLink", None)
-
+    print("Creating bag")
+    bag = db.from_sequence(table_urls).map(load_from_url)
+    print("Created bag")
     return bag
 
 
 def convert_table_to_parquet(
-    bag, file_name: str, out_dir: Union[str, Path]
+    bag, file_name: str, out_dir: Union[str, Path], odata_version: str
 ) -> Path:  # (TODO -> IS THERE A FASTER/BETTER WAY??)
     """Converts a Dask Bag to Parquet files and stores them on disk.
 
@@ -686,22 +602,25 @@ def convert_table_to_parquet(
     # File path to create as parquet file
     pq_path = Path(f"{out_dir}/{file_name}.parquet")
 
+    # # Convert bag to parquet #TODO: Check if this method is better then all the file handling below.
+    # # NOTE: this outputs a folder, named (i.e.) "cbs.v3.83583NED_TypedDataSet.parquet", and nests files underneath,
+    # # such as "part.0.parquet", as well as "_metadata" (can be avoided using `write_metadata_file=False`), and "_common_metadata".
+    # bag.to_dataframe().to_parquet(pq_path)
+
     # Dump each bag partition to json file
-    bag.map(json.dumps).to_textfiles(temp_json_dir / "*.json")
+    print(f"Dumping bag to textfiles for {file_name}")
+    bag.map(ndjson.dumps).to_textfiles(temp_json_dir / "*.json")
+    print(f"Finished dumping bag to textfiles for {file_name}")
     # Get all json file names with path
-    filenames = sorted(glob(str(temp_json_dir) + "/*.json"))
-    # Append all jsons into a single file  ## Also possible to use Dask Delayed here https://stackoverflow.com/questions/39566809/writing-dask-partitions-into-single-file
+    filenames = [f for f in temp_json_dir.glob("*.json")]
+    # Append all ndjsons into a single ndjson file
+    print(f"Starting to concatanate files for {file_name}")
     with open(json_path, "w+") as json_file:
         for fn in filenames:
-            with open(fn) as f:
+            with open(Path(fn), "r") as f:
                 json_file.write(f.read())
             remove(fn)
-
-    # # Works without converting to ndjson - might be needed in a different implementation?
-    # # Convert to ndjson format
-    # with open(json_path, 'w+') as ndjson:
-    #     for record in table:
-    #         ndjson.write(json.dumps(record) + "\n")
+    print(f"Concluded concatanating files for {file_name}")
 
     # Create PyArrow table from ndjson file
     pa_table = pa_json.read_json(json_path)
@@ -711,9 +630,7 @@ def convert_table_to_parquet(
 
     # Remove temp ndjson file
     remove(json_path)
-    # Remove temp folder if empty  #TODO -> inefficiently(?) creates and removes the folder each time the function is called
-    if not listdir(temp_json_dir):
-        rmdir(temp_json_dir)
+
     return pq_path
 
 
@@ -1079,7 +996,9 @@ def cbsodata_to_gbq(
     # Get all table-specific urls for the given dataset id
     urls = get_urls(id=id, odata_version=odata_version, third_party=third_party)
     # Get dataset metadata
-    source_meta = get_metadata_cbs(urls=urls, odata_version=odata_version)
+    source_meta = get_metadata_cbs(
+        id=id, third_party=third_party, odata_version=odata_version
+    )
     gcp_meta = get_metadata_gcp(
         id=id,
         source=source,
@@ -1108,9 +1027,17 @@ def cbsodata_to_gbq(
     pq_dir = create_named_dir(
         id=id, odata_version=odata_version, source=source, config=config
     )
+    # Set main table shape to use for parallel fetching later
+    main_table_shape = get_main_table_shape(source_meta)
     # Fetch each table from urls, convert to parquet and store locally
     files_parquet = tables_to_parquet(
-        id=id, urls=urls, odata_version=odata_version, source=source, pq_dir=pq_dir
+        id=id,
+        third_party=third_party,
+        urls=urls,
+        main_table_shape=main_table_shape,
+        odata_version=odata_version,
+        source=source,
+        pq_dir=pq_dir,
     )
     # Get columns' descriptions from CBS
     col_descriptions = get_column_descriptions(urls, odata_version=odata_version)
@@ -1143,7 +1070,7 @@ def cbsodata_to_gbq(
         credentials=credentials,
     )
 
-    # Keep only file names
+    # Get file names for BQ dataset ids
     file_names = get_file_names(files_parquet)
     # Create table in GBQ
     dataset_ref = gcs_to_gbq(
@@ -1173,10 +1100,15 @@ def cbsodata_to_gbq(
             dataset_ref, desc_dict, config, gcp_env, credentials=credentials
         )
 
+    # Remove all local files for this process
+    rmtree(pq_dir.parent)
+
     return files_parquet  # TODO: return bq job ids
 
 
-def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
+def get_urls(
+    id: str, odata_version: str, third_party: bool = False
+) -> dict:  # TODO: Rename to get_dataset_urls (contrast with get_table_urls)
     """Returns a dict with urls of all dataset tables given a valid CBS dataset id.
 
     Parameters
@@ -1217,7 +1149,7 @@ def get_urls(id: str, odata_version: str, third_party: bool = False) -> dict:
         }
         urls = {
             item["name"]: base_url[third_party] + "/" + item["url"]
-            for item in get_odata_v4(base_url[third_party])
+            for item in requests.get(base_url[third_party]).json()["value"]
         }
     elif odata_version == "v3":
         base_url = {
@@ -1277,12 +1209,12 @@ def create_named_dir(
     PosixPath('/Users/{YOUR_USERNAME}/statline-bq/temp/cbs/v3/83583NED/20201214/parquet')
     """
 
-    # Get paths from config object
-    root = Path(__file__).parent
-    temp = root / Path(config.paths.temp)
+    # Create "source" dir if does not exist
+    temp = Path(gettempdir())
     source_dir = temp / Path(getattr(config.paths, locals()["source"]))
 
-    # Create placeholders for storage
+    # Create dataset dir for where final files (i.e. parqeut) will be stored (this is the folder to be eventually uploaded to GCS)
+    # TODO: Consider taking the "parquet" string as parameter - it should not be embedded, as this function is general in nature (although currently used only once).
     path = source_dir / Path(
         f"{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
@@ -1290,9 +1222,79 @@ def create_named_dir(
     return path_to_named_dir
 
 
+def generate_table_urls(base_url: str, n_records: int, odata_version: str) -> list:
+    """Creates a list of urls for parallel fetching.
+
+    Given a base url, this function creates a list of multiple urls, with query parameters
+    added to the base url, each reading "$skip={i}" where i is a multiplication of 10,000.
+    The base url is meant to be the url for a CBS table, and so each generated url corresponds
+    to the next 10,000 rows of the table.
+
+    Parameters
+    ----------
+    base_url : str
+        The base url for the table.
+    n_records : int
+        The amount of rows(=records/observations) in the table.
+    odata_version : str
+        version of the odata for this dataset - must be either "v3" or "v4".
+
+    Returns
+    -------
+    table_urls : list of str
+        A list holding all urls needed to fetch full table data.
+    """
+    # Since v3 already has a parameter ("?$format=json"), the v3 and v4 connectors are different
+    connector = {"v3": "&", "v4": "?"}
+    # Only the main table has more then 10000 rows, the other tables use None
+    if n_records is not None:
+        # Create url list with query parameters
+        table_urls = [
+            base_url + f"{connector[odata_version]}$skip={str(i+1)}0000"
+            for i in range(n_records // 10000)
+        ]
+        # Add base url to list
+        table_urls.insert(0, base_url)
+    else:
+        table_urls = [base_url]
+    return table_urls
+
+
+def load_from_url(target_url: str):
+    """Fetch json formatted data from a specific CBS table url.
+
+    Parameters
+    ----------
+    target_url : str
+        The url to fetch from
+
+    Returns
+    -------
+    list of dicts
+        All entries in url, as a list of dicts
+
+    Raises
+    ------
+    FileNotFoundError
+        if no values exist in the url
+    """
+
+    print()
+    print(
+        f"load_from_url: url = {target_url}"
+    )  # TODO - Bubble print statement to logging in general and in Prefect
+    r = requests.get(target_url).json()
+    if r["value"]:
+        return r["value"]
+    else:
+        raise FileNotFoundError
+
+
 def tables_to_parquet(
     id: str,
+    third_party: bool,
     urls: dict,
+    main_table_shape: dict,
     odata_version: str,
     source: str = "cbs",
     pq_dir: Union[Path, str] = None,
@@ -1343,14 +1345,45 @@ def tables_to_parquet(
         # Create table name to be used in GCS
         table_name = f"{source}.{odata_version}.{id}_{key}"
 
-        # Get data from source
-        table = get_odata(target_url=url, odata_version=odata_version)
+        # If processing main table, set table shape accordingly. Else set to None.
+        if key in ("TypedDataSet", "Observations"):
+            # if key in ("TypedDataSet"):
+            table_shape = main_table_shape
+        else:
+            table_shape = {
+                "n_records": None,
+                "n_columns": None,
+                "n_observations": None,
+            }  # TODO: A better way to default on non-main tables?
 
-        # Check if get_odata returned None (when link in CBS returns empty table, i.e. CategoryGroups in "84799NED" - seems only relevant for v3 only)
+        if odata_version == "v3":
+            # Generate all table urls
+            table_urls = generate_table_urls(
+                url, table_shape["n_records"], odata_version
+            )
+        elif odata_version == "v4":
+            table_urls = generate_table_urls(
+                url, table_shape["n_observations"], odata_version
+            )
+
+        # Get table as a dask bag
+        table = get_odata(table_urls=table_urls)
+
+        # Check if get_odata returned None (when link in CBS returns empty table, i.e. CategoryGroups in "84799NED" - seems only relevant for v3)
         if table is not None:
 
             # Convert to parquet
-            pq_path = convert_table_to_parquet(table, table_name, pq_dir)
+            print(
+                f"Starting convert_table_to_parquet for table {table_name}"
+            )  # TODO Convert to logging, add pq_dir to INFO
+            pq_path = convert_table_to_parquet(
+                bag=table,
+                file_name=table_name,
+                out_dir=pq_dir,
+                odata_version=odata_version,
+            )
+            print()
+            print(f"Finished convert_table_to_parquet for table {table_name}")
 
             # Add path of file to set
             files_parquet.add(pq_path)
@@ -1638,6 +1671,7 @@ def main(
     id = id.upper()
     if check_gcp_env(gcp_env):
         print(f"Processing dataset {id}")
+        # print("TEST CHANGES")
         odata_version = check_v4(id=id, third_party=third_party)
         cbsodata_to_gbq(
             id=id,
@@ -1658,31 +1692,16 @@ if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    main("83583ned", config=config, gcp_env="dev", force=True)
-    # main("83765NED", config=config, gcp_env="dev")
+    # # Test cbs core dataset, odata_version is v3
+    main("83583NED", config=config, gcp_env="dev", force=True)
+    # Test cbs core dataset, odata_version is v4
+    # main("83765NED", config=config, gcp_env="dev", force=True)
+    # Test IV3 dataset, odata_version is v3
     # main(
     #     "40060NED",
     #     source="mlz",
     #     third_party=True,
     #     config=config,
     #     gcp_env="dev",
-    #     force=False,
+    #     force=True,
     # )
-
-# from statline_bq.config import get_config
-
-# config = get_config("./config.toml")
-
-# description = get_description_v3(
-#     "https://opendata.cbs.nl/ODataFeed/odata/{id}?$format=json"
-# )
-# print(description)
-
-# gcs_to_gbq(
-#     # id="835833NED",
-#     source="cbs",
-#     odata_version="v3",
-#     gcp=config.gcp,
-#     gcs_folder="cbs/v3/83583NED/20201126",
-#     file_names=["cbs.v3.83583NED_Bedrijfsgrootte.parquet"],
-# )

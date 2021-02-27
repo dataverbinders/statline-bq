@@ -79,5 +79,8 @@ ENV/
 # temp folders
 temp/
 
-# tseting notebook
-testing.ipynb
+# testing notebook
+notebooks/
+
+# dask
+dask-worker-space/
