@@ -1668,7 +1668,7 @@ def main(
     force: bool = False,
 ) -> None:
     gcp_env = gcp_env.lower()
-    id = id.upper()
+    # id = id.upper()
     if check_gcp_env(gcp_env):
         print(f"Processing dataset {id}")
         # print("TEST CHANGES")
