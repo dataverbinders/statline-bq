@@ -90,7 +90,7 @@ def get_metadata_cbs(id: str, third_party: bool, odata_version: str) -> dict:
     id: str
         CBS Dataset id, i.e. "83583NED"
 
-    third_party: bool, default=False
+    third_party: bool
         Flag to indicate dataset is not originally from CBS. Set to true
         to use dataderden.cbs.nl as base url (not available in v4 yet).
 
@@ -159,8 +159,8 @@ def get_main_table_shape(metadata: dict) -> dict:
         The dataset's main table's shape
     """
     main_table_shape = {
-        "n_records": get_from_meta(metadata, "n_records"),
-        "n_columns": get_from_meta(metadata, "n_columns"),
+        "n_records": get_from_meta(metadata, "RecordCount"),
+        "n_columns": get_from_meta(metadata, "ColumnCount"),
         "n_observations": get_from_meta(metadata, "ObservationCount"),
     }
     return main_table_shape
