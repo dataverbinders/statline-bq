@@ -609,7 +609,10 @@ def convert_table_to_parquet(
 
     # Dump each bag partition to json file
     print(f"Dumping bag to textfiles for {file_name}")
-    bag.map(ndjson.dumps).to_textfiles(temp_json_dir / "*.json")
+    try:
+        bag.map(ndjson.dumps).to_textfiles(temp_json_dir / "*.json")
+    except TypeError:
+        return None  # TODO: Is this OK???
     print(f"Finished dumping bag to textfiles for {file_name}")
     # Get all json file names with path
     filenames = [f for f in temp_json_dir.glob("*.json")]
@@ -1226,9 +1229,9 @@ def generate_table_urls(base_url: str, n_records: int, odata_version: str) -> li
     """Creates a list of urls for parallel fetching.
 
     Given a base url, this function creates a list of multiple urls, with query parameters
-    added to the base url, each reading "$skip={i}" where i is a multiplication of 10,000.
-    The base url is meant to be the url for a CBS table, and so each generated url corresponds
-    to the next 10,000 rows of the table.
+    added to the base url, each reading "$skip={i}" where i is a multiplication of 10,000
+    (for v3) or 100,000 (for v4). The base url is meant to be the url for a CBS table, and
+    so each generated url corresponds to the next 10,000(/100,000) rows of the table.
 
     Parameters
     ----------
@@ -1246,12 +1249,13 @@ def generate_table_urls(base_url: str, n_records: int, odata_version: str) -> li
     """
     # Since v3 already has a parameter ("?$format=json"), the v3 and v4 connectors are different
     connector = {"v3": "&", "v4": "?"}
+    cbs_limit = {"v3": 10000, "v4": 100000}
     # Only the main table has more then 10000 rows, the other tables use None
     if n_records is not None:
         # Create url list with query parameters
         table_urls = [
             base_url + f"{connector[odata_version]}$skip={str(i+1)}0000"
-            for i in range(n_records // 10000)
+            for i in range(n_records // cbs_limit[odata_version])
         ]
         # Add base url to list
         table_urls.insert(0, base_url)
@@ -1287,7 +1291,8 @@ def load_from_url(target_url: str):
     if r["value"]:
         return r["value"]
     else:
-        raise FileNotFoundError
+        return None
+        # raise FileNotFoundError
 
 
 def tables_to_parquet(
@@ -1369,23 +1374,21 @@ def tables_to_parquet(
         # Get table as a dask bag
         table = get_odata(table_urls=table_urls)
 
-        # Check if get_odata returned None (when link in CBS returns empty table, i.e. CategoryGroups in "84799NED" - seems only relevant for v3)
-        if table is not None:
-
-            # Convert to parquet
-            print(
-                f"Starting convert_table_to_parquet for table {table_name}"
-            )  # TODO Convert to logging, add pq_dir to INFO
-            pq_path = convert_table_to_parquet(
-                bag=table,
-                file_name=table_name,
-                out_dir=pq_dir,
-                odata_version=odata_version,
-            )
-            print()
-            print(f"Finished convert_table_to_parquet for table {table_name}")
-
-            # Add path of file to set
+        # Convert to parquet
+        print(
+            f"Starting convert_table_to_parquet for table {table_name}"
+        )  # TODO Convert to logging, add pq_dir to INFO
+        pq_path = convert_table_to_parquet(
+            bag=table,
+            file_name=table_name,
+            out_dir=pq_dir,
+            odata_version=odata_version,
+        )
+        print()
+        print(f"Finished convert_table_to_parquet for table {table_name}")
+        # Check if convert_table_to_parquet returned None (when link in CBS returns empty table, i.e. CategoryGroups in "84799NED" - seems only relevant for v3)
+        # Add path of file to set
+        if pq_path:
             files_parquet.add(pq_path)
 
     return files_parquet
@@ -1693,7 +1696,7 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    main("83583NED", config=config, gcp_env="dev", force=True)
+    main("37259ned", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
     # main("83765NED", config=config, gcp_env="dev", force=True)
     # Test IV3 dataset, odata_version is v3
