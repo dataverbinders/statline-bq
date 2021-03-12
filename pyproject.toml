@@ -16,12 +16,12 @@ google-cloud-bigquery = "^1.26.1"
 google-cloud-storage = "^1.30.0"
 # prefect = "^0.14.0"
 requests = "^2.24.0"
-pyarrow = "^2.0.0"
 fsspec = "^0.8.4"
 toml = "^0.10.2"
 pyserde = {extras = ["toml"], version = "^0.2.0"}
 tomlkit = "^0.7.0"
 ndjson = "^0.3.1"
+pyarrow = "^3.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

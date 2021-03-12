@@ -1696,7 +1696,7 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    main("37259ned", config=config, gcp_env="dev", force=True)
+    main("83583NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
     # main("83765NED", config=config, gcp_env="dev", force=True)
     # Test IV3 dataset, odata_version is v3
