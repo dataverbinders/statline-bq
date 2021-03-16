@@ -628,6 +628,10 @@ def convert_table_to_parquet(
     # Create PyArrow table from ndjson file
     pa_table = pa_json.read_json(json_path)
 
+    # Field names with "." are not allowed when reading the file in BQ
+    new_column_names = [name.replace(".", "_") for name in pa_table.column_names]
+    pa_table = pa_table.rename_columns(new_column_names)
+
     # Store parquet table #TODO -> set proper data types in parquet file
     pq.write_table(pa_table, pq_path)
 
