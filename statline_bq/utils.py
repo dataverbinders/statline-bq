@@ -679,8 +679,6 @@ def upload_to_gcs(
     odata_version: str = None,
     id: str = None,
     gcp: GcpProject = None,
-    # config: Config = None,
-    # gcp_env: str = None,
     credentials: Credentials = None,
 ) -> str:  # TODO change the return value to some indication or id from Google?:
     """Uploads all files in a given directory to Google Cloud Storage.
@@ -773,7 +771,6 @@ def get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
 def bq_update_main_table_col_descriptions(
     dataset_ref: str,
     descriptions: dict,
-    # config: Config = None,
     gcp: GcpProject = None,
     credentials: Credentials = None,
 ) -> bigquery.Table:
@@ -841,8 +838,6 @@ def get_col_descs_from_gcs(
     source: str = "cbs",
     odata_version: str = None,
     gcp: GcpProject = None,
-    # config: Config = None,
-    # gcp_env: str = "dev",
     gcs_folder: str = None,
     credentials: Credentials = None,
 ) -> dict:
@@ -1083,8 +1078,6 @@ def cbsodata_to_gbq(
         odata_version=odata_version,
         id=id,
         gcp=gcp,
-        # config=config,
-        # gcp_env=gcp_env,
         credentials=credentials,
     )
 
@@ -1095,10 +1088,8 @@ def cbsodata_to_gbq(
         id=id,
         source=source,
         odata_version=odata_version,
-        # config=config,
         gcs_folder=gcs_folder,
         file_names=file_names,
-        # gcp_env=gcp_env,
         gcp=gcp,
         credentials=credentials,
     )
@@ -1108,8 +1099,6 @@ def cbsodata_to_gbq(
         source=source,
         odata_version=odata_version,
         gcp=gcp,
-        # config=config,
-        # gcp_env=gcp_env,
         gcs_folder=gcs_folder,
         credentials=credentials,
     )
@@ -1119,7 +1108,6 @@ def cbsodata_to_gbq(
         bq_update_main_table_col_descriptions(
             dataset_ref=dataset_ref,
             descriptions=desc_dict,
-            # config=config,
             gcp=gcp,
             credentials=credentials,
         )
@@ -1552,12 +1540,9 @@ def gcs_to_gbq(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
-    # third_party: bool = False,
-    # config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
     gcp: GcpProject = None,
-    # gcp_env: str = None,
     credentials: Credentials = None,
 ) -> None:  # TODO Return job id
     """Creates a BQ dataset and links all relevant tables from GCS underneath.
@@ -1693,7 +1678,6 @@ def main(
     force: bool = False,
 ) -> None:
     gcp_env = gcp_env.lower()
-    # id = id.upper()
     if check_gcp_env(gcp_env):
         print(f"Processing dataset {id}")
         # print("TEST CHANGES")

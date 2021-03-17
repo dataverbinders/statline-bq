@@ -32,7 +32,7 @@ class GcpProject:
 @serialize
 @dataclass(frozen=True)
 class GcpProductionProjects:
-    """An object holding all different production GcpProjects.
+    """An object holding all possible production GcpProjects.
 
     Attributes
     ----------
