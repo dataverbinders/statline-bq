@@ -118,6 +118,12 @@ class Paths:
     bag: str = None
     mlz: str = None
     rivm: str = None
+    politie: str = None
+    azw: str = None
+    iv3: str = None
+    mkb: str = None
+    jm: str = None
+    interreg: str = None
 
 
 @deserialize

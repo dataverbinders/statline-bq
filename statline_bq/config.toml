@@ -27,9 +27,15 @@
     
 [paths]
 # Temporary folders are defined here.
-# Every source must be defined here, or an error is thrown. #TODO: Make this better
+# Every source must be defined here, or an error is thrown. #TODO Make this better
 # All folders are nested under the local temp folder, taken by `tempfile.gettempdir()`
 
 cbs = "cbs"
 mlz = "mlz"
 rivm = "rivm"
+politie = "politie"
+azw = "azw"
+iv3 = "iv3"
+mkb = "mkb"
+jm = "jm"
+interreg = "interreg"
