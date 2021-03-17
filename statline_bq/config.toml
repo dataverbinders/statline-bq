@@ -1,24 +1,29 @@
 [gcp]
     [gcp.prod]
-    project_id = "dataverbinders"
-    bucket = "dataverbinders"
-    location = "EU"
-    # credentials = ""  # currently not taken here. User needs to have authentication setup previous to using this library.
-                        # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
+        [gcp.prod.cbs_dl]
+        project_id = "dataverbinders-cbs-dl"
+        bucket = "dataverbinders-cbs-dl"
+        location = "EU"
+
+        [gcp.prod.external_dl]
+        project_id = "dataverbinders-external-dl"
+        bucket = "dataverbinders-external-dl"
+        location = "EU"
+
+        [gcp.prod.dwh]
+        project_id = "dataverbinders-open-dwh"
+        bucket = "dataverbinders-open-dwh"  # No bucket exists - not needed currently.
+        location = "EU"
 
     [gcp.test]
     project_id = "dataverbinders-test"
     bucket = "dataverbinders-test"
     location = "EU"
-    # credentials = ""  # currently not taken here. User needs to have authentication setup previous to using this library.
-                        # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
 
     [gcp.dev]
     project_id = "dataverbinders-dev"
     bucket = "dataverbinders-dev"
     location = "EU"
-    # credentials = ""  # currently not taken here. User needs to have authentication setup previous to using this library.
-                        # see "https://cloud.google.com/docs/authentication/end-user" for instructions if issues occur with authentication.
     
 [paths]
 # Temporary folders are defined here.

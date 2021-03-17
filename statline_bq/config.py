@@ -31,6 +31,19 @@ class GcpProject:
 @deserialize
 @serialize
 @dataclass(frozen=True)
+class GcpProductionProjects:
+    """????
+
+    """
+
+    cbs_dl: GcpProject
+    external_dl: GcpProject
+    dwh: GcpProject
+
+
+@deserialize
+@serialize
+@dataclass(frozen=True)
 class Gcp:
     """An immutable Data Class for Google Cloud Platform, holding three
     GCPProject, one per development stage: 'dev', 'test' and 'prod'.
@@ -47,7 +60,7 @@ class Gcp:
 
     dev: GcpProject
     test: GcpProject
-    prod: GcpProject
+    prod: GcpProductionProjects
 
 
 @deserialize

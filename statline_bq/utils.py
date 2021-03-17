@@ -641,7 +641,7 @@ def convert_table_to_parquet(
     return pq_path
 
 
-def set_gcp(config: Config, gcp_env: str) -> GcpProject:
+def set_gcp(config: Config, gcp_env: str, source: str) -> GcpProject:
     """Sets the desired GCP donciguration
 
     Parameters
@@ -649,20 +649,28 @@ def set_gcp(config: Config, gcp_env: str) -> GcpProject:
     config : Config
         `statline_bq.config.Config` object
     gcp_env : str
-        String representing the deierd environment between ['dev', 'test', 'prod']
+        String representing the desired environment between ['dev', 'test', 'prod']
+    source : str
+        The source of the dataset.
 
     Returns
     -------
     GcpProject
-        [description]
+        A GcpProject class object holding GCP Project parameters (project id, bucket)
     """
     gcp_env = gcp_env.lower()
+    source = source.lower() if source.lower() == "cbs" else "external"
+
     config_envs = {
         "dev": config.gcp.dev,
         "test": config.gcp.test,
-        "prod": config.gcp.prod,
+        "prod": {
+            "cbs": config.gcp.prod.cbs_dl,
+            "external": config.gcp.prod.external_dl
+            # TODO: is "prod-dwh" needed?
+        },
     }
-    return config_envs[gcp_env]
+    return config_envs[gcp_env][source] if gcp_env == "prod" else config_envs[gcp_env]
 
 
 def upload_to_gcs(
@@ -710,7 +718,7 @@ def upload_to_gcs(
         The folder (=blob) into which the tables have been uploaded # TODO -> Return success/ fail code?/job ID
     """
     # Initialize Google Storage Client and get bucket according to gcp_env
-    gcp = set_gcp(config=config, gcp_env=gcp_env)
+    gcp = set_gcp(config=config, gcp_env=gcp_env, source=source)
     gcs = storage.Client(project=gcp.project_id, credentials=credentials)
     gcs_bucket = gcs.get_bucket(gcp.bucket)
     # Set blob
@@ -765,7 +773,7 @@ def bq_update_main_table_col_descriptions(
     dataset_ref: str,
     descriptions: dict,
     config: Config = None,
-    gcp_env: str = "dev",
+    gcp: GcpProject = None,
     credentials: Credentials = None,
 ) -> bigquery.Table:
     """Updates column descriptions of main table for existing BQ dataset
@@ -787,8 +795,8 @@ def bq_update_main_table_col_descriptions(
         The updated table
     """
 
-    # Set GCP environmnet
-    gcp = set_gcp(config=config, gcp_env=gcp_env)
+    # # Set GCP environmnet
+    # gcp = set_gcp(config=config, gcp_env=gcp_env, source=source)
 
     # Construct a BigQuery client object.
     client = bigquery.Client(project=gcp.project_id, credentials=credentials)
@@ -864,7 +872,7 @@ def get_col_descs_from_gcs(
     dict
         Dictionary holding column descriptions
     """
-    gcp = set_gcp(config, gcp_env)
+    gcp = set_gcp(config, gcp_env, source)
     client = storage.Client(project=gcp.project_id, credentials=credentials)
     bucket = client.get_bucket(gcp.bucket)
     blob = bucket.get_blob(
@@ -999,7 +1007,7 @@ def cbsodata_to_gbq(
     """
 
     # Set gcp environment
-    gcp = set_gcp(config, gcp_env)
+    gcp = set_gcp(config, gcp_env, source)
     # Get all table-specific urls for the given dataset id
     urls = get_urls(id=id, odata_version=odata_version, third_party=third_party)
     # Get dataset metadata
@@ -1104,7 +1112,7 @@ def cbsodata_to_gbq(
     # Add column descriptions to main table (only relevant for v3, as v4 is a "long format")
     if odata_version == "v3":
         bq_update_main_table_col_descriptions(
-            dataset_ref, desc_dict, config, gcp_env, credentials=credentials
+            dataset_ref, desc_dict, config, gcp, credentials=credentials
         )
 
     # Remove all local files for this process
@@ -1319,7 +1327,7 @@ def tables_to_parquet(
     odata_version : str
         version of the odata for this dataset - must be either "v3" or "v4".
     source : str, default='cbs
-        The source of the dataset. Currently only "cbs" is relevant.
+        The source of the dataset.
     pq_dir : Path or str
         The directory where the putput Parquet files are stored.
 
@@ -1468,7 +1476,7 @@ def check_bq_dataset(
     id : str
         The dataset id, i.e. '83583NED'
     source : str
-        Source to load data into
+        The source of the datset
     odata_version : str
         "v3" or "v4" indicating the version
     gcp : Gcp
@@ -1553,7 +1561,7 @@ def gcs_to_gbq(
     id: str
         CBS Dataset id, i.e. "83583NED".
     source: str, default="cbs"
-        The source of the dataset. Currently only "cbs" is relevant.
+        The source of the dataset.
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
     third_party : bool, default=False
@@ -1590,7 +1598,7 @@ def gcs_to_gbq(
     # ]
 
     # Set GCP Environment
-    gcp = set_gcp(config=config, gcp_env=gcp_env)
+    gcp = set_gcp(config=config, gcp_env=gcp_env, source=source)
     # Get metadata
     meta_gcp = get_metadata_gcp(
         id=id,
@@ -1700,7 +1708,7 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    main("83583NED", config=config, gcp_env="dev", force=True)
+    main("83583NED", config=config, gcp_env="prod", force=False)
     # Test cbs core dataset, odata_version is v4
     # main("83765NED", config=config, gcp_env="dev", force=True)
     # Test IV3 dataset, odata_version is v3
