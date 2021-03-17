@@ -32,7 +32,16 @@ class GcpProject:
 @serialize
 @dataclass(frozen=True)
 class GcpProductionProjects:
-    """????
+    """An object holding all different production GcpProjects.
+
+    Attributes
+    ----------
+    cbs_dl: GcpProject
+        A GcpProject instance for a CBS Datalake.
+    external_dl: GcpProject
+        A GcpProject instance for an external (=non CBS) Datalake.
+    dwh: GcpProject
+        A GcpProject instance to be for a datawarehouse.
 
     """
 
@@ -54,8 +63,8 @@ class Gcp:
         A GcpProject instance to be used for development.
     test: GcpProject
         A GcpProject instance to be used for testing.
-    prod: GcpProject
-        A GcpProject instance to be used for production.
+    prod: GcpProductionProjects
+        A GcpProductionProjects instance, holding various GcpProjects for production.
     """
 
     dev: GcpProject

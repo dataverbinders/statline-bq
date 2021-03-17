@@ -678,8 +678,9 @@ def upload_to_gcs(
     source: str = "cbs",
     odata_version: str = None,
     id: str = None,
-    config: Config = None,
-    gcp_env: str = None,
+    gcp: GcpProject = None,
+    # config: Config = None,
+    # gcp_env: str = None,
     credentials: Credentials = None,
 ) -> str:  # TODO change the return value to some indication or id from Google?:
     """Uploads all files in a given directory to Google Cloud Storage.
@@ -718,7 +719,7 @@ def upload_to_gcs(
         The folder (=blob) into which the tables have been uploaded # TODO -> Return success/ fail code?/job ID
     """
     # Initialize Google Storage Client and get bucket according to gcp_env
-    gcp = set_gcp(config=config, gcp_env=gcp_env, source=source)
+    # gcp = set_gcp(config=config, gcp_env=gcp_env, source=source)
     gcs = storage.Client(project=gcp.project_id, credentials=credentials)
     gcs_bucket = gcs.get_bucket(gcp.bucket)
     # Set blob
@@ -772,7 +773,7 @@ def get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
 def bq_update_main_table_col_descriptions(
     dataset_ref: str,
     descriptions: dict,
-    config: Config = None,
+    # config: Config = None,
     gcp: GcpProject = None,
     credentials: Credentials = None,
 ) -> bigquery.Table:
@@ -839,8 +840,9 @@ def get_col_descs_from_gcs(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
-    config: Config = None,
-    gcp_env: str = "dev",
+    gcp: GcpProject = None,
+    # config: Config = None,
+    # gcp_env: str = "dev",
     gcs_folder: str = None,
     credentials: Credentials = None,
 ) -> dict:
@@ -872,7 +874,7 @@ def get_col_descs_from_gcs(
     dict
         Dictionary holding column descriptions
     """
-    gcp = set_gcp(config, gcp_env, source)
+    # gcp = set_gcp(config, gcp_env, source)
     client = storage.Client(project=gcp.project_id, credentials=credentials)
     bucket = client.get_bucket(gcp.bucket)
     blob = bucket.get_blob(
@@ -1080,8 +1082,9 @@ def cbsodata_to_gbq(
         source=source,
         odata_version=odata_version,
         id=id,
-        config=config,
-        gcp_env=gcp_env,
+        gcp=gcp,
+        # config=config,
+        # gcp_env=gcp_env,
         credentials=credentials,
     )
 
@@ -1092,10 +1095,11 @@ def cbsodata_to_gbq(
         id=id,
         source=source,
         odata_version=odata_version,
-        config=config,
+        # config=config,
         gcs_folder=gcs_folder,
         file_names=file_names,
-        gcp_env=gcp_env,
+        # gcp_env=gcp_env,
+        gcp=gcp,
         credentials=credentials,
     )
     # Add column description to main table
@@ -1103,8 +1107,9 @@ def cbsodata_to_gbq(
         id=id,
         source=source,
         odata_version=odata_version,
-        config=config,
-        gcp_env=gcp_env,
+        gcp=gcp,
+        # config=config,
+        # gcp_env=gcp_env,
         gcs_folder=gcs_folder,
         credentials=credentials,
     )
@@ -1112,7 +1117,11 @@ def cbsodata_to_gbq(
     # Add column descriptions to main table (only relevant for v3, as v4 is a "long format")
     if odata_version == "v3":
         bq_update_main_table_col_descriptions(
-            dataset_ref, desc_dict, config, gcp, credentials=credentials
+            dataset_ref=dataset_ref,
+            descriptions=desc_dict,
+            # config=config,
+            gcp=gcp,
+            credentials=credentials,
         )
 
     # Remove all local files for this process
@@ -1543,11 +1552,12 @@ def gcs_to_gbq(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
-    third_party: bool = False,
-    config: Config = None,
+    # third_party: bool = False,
+    # config: Config = None,
     gcs_folder: str = None,
     file_names: list = None,
-    gcp_env: str = None,
+    gcp: GcpProject = None,
+    # gcp_env: str = None,
     credentials: Credentials = None,
 ) -> None:  # TODO Return job id
     """Creates a BQ dataset and links all relevant tables from GCS underneath.
@@ -1598,7 +1608,7 @@ def gcs_to_gbq(
     # ]
 
     # Set GCP Environment
-    gcp = set_gcp(config=config, gcp_env=gcp_env, source=source)
+    # gcp = set_gcp(config=config, gcp_env=gcp_env, source=source)
     # Get metadata
     meta_gcp = get_metadata_gcp(
         id=id,
@@ -1708,7 +1718,7 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    main("83583NED", config=config, gcp_env="prod", force=False)
+    main("83583NED", config=config, gcp_env="prod", force=True)
     # Test cbs core dataset, odata_version is v4
     # main("83765NED", config=config, gcp_env="dev", force=True)
     # Test IV3 dataset, odata_version is v3
