@@ -666,8 +666,8 @@ def set_gcp(config: Config, gcp_env: str, source: str) -> GcpProject:
         "test": config.gcp.test,
         "prod": {
             "cbs": config.gcp.prod.cbs_dl,
-            "external": config.gcp.prod.external_dl
-            # TODO: is "prod-dwh" needed?
+            "external": config.gcp.prod.external_dl,
+            "dwh": config.gcp.prod.dwh,
         },
     }
     return config_envs[gcp_env][source] if gcp_env == "prod" else config_envs[gcp_env]
