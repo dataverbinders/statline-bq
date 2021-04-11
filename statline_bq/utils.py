@@ -530,115 +530,135 @@ def get_column_descriptions_v3(url_data_properties: str) -> dict:
     return col_desc
 
 
-def get_odata(table_urls: list) -> DaskBag:
-    """Create a dask.bag object holding all values of a table for a CBS dataset
+# def get_odata(table_urls: list) -> DaskBag:
+#     """Create a dask.bag object holding all values of a table for a CBS dataset
 
-    This functions maps `load_from_url()` on a list of urls, all related to a single
-    CBS table, from a specific dataset. Since requests to CBS are limited at 10,000
-    rows (=observations/records), the table_urls consists of the same base url, each ending with "$?SKIP={i}",
-    where i is an integer with multiples of 10,000, i.e.:
+#     This functions maps `load_from_url()` on a list of urls, all related to a single
+#     CBS table, from a specific dataset. Since requests to CBS are limited at 10,000
+#     rows (=observations/records), the table_urls consists of the same base url, each ending with "$?SKIP={i}",
+#     where i is an integer with multiples of 10,000, i.e.:
 
-    [
-        "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json",
-        "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json&$skip=10000"
-        "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json&$skip=20000"
-        ...
-        ...
-    ]
+#     [
+#         "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json",
+#         "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json&$skip=10000"
+#         "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json&$skip=20000"
+#         ...
+#         ...
+#     ]
 
-    Parameters
-    ----------
-    table_urls: list of str
-        A list of valid urls of a table from CBS
+#     Parameters
+#     ----------
+#     table_urls: list of str
+#         A list of valid urls of a table from CBS
 
-    Returns
-    -------
-    bag: Dask Bag
-        The values included in table_urls as json type, as a single Dask bag
-    """
-    print("Creating bag")
-    bag = db.from_sequence(table_urls).map(load_from_url)
-    print("Created bag")
-    return bag
+#     Returns
+#     -------
+#     bag: Dask Bag
+#         The values included in table_urls as json type, as a single Dask bag
+#     """
+#     print("Creating bag")
+#     bag = db.from_sequence(table_urls).map(url_to_ndjson)  # ADD FOLDER AS PARAM
+#     # bag = db.from_sequence(table_urls).map(load_from_url)
+#     print("Created bag")
+#     return bag
 
 
-def convert_table_to_parquet(
-    bag, file_name: str, out_dir: Union[str, Path], odata_version: str
-) -> Path:  # (TODO -> IS THERE A FASTER/BETTER WAY??)
-    """Converts a Dask Bag to Parquet files and stores them on disk.
+def convert_ndjsons_to_parquet(
+    files: List[Path], file_name: str, out_dir: Union[Path, str]
+) -> Path:
+    pq_file = Path(f"{out_dir}/{file_name}.parquet")
+    schema = pa_json.read_json(files[0]).schema
+    with pq.ParquetWriter(pq_file, schema) as writer:
+        for f in files:
+            print(f"Processing {f}")
+            table = pa_json.read_json(f)
+            writer.write_table(table)
+            remove(f)
+    return pq_file
 
-    Converts a dask bag holding data from a CBS table to Parquet form
-    and stores it on disk. The bag should be filled by dicts (can be nested)
-    which can be serialized as json.
 
-    The current implementation iterates over each bag partition and dumps
-    it into a json file, then appends all file into a single json file. That
-    json file is then read into a PyArrow table, and finally that table is
-    written as a parquet file to disk.
+# def convert_table_to_parquet(
+#     bag,
+#     file_name: str,
+#     out_dir: Union[str, Path],
+#     odata_version: str
+#     # bag, file_name: str, out_dir: Union[str, Path], odata_version: str
+# ) -> Path:  # (TODO -> IS THERE A FASTER/BETTER WAY??)
+#     """Converts a Dask Bag to Parquet files and stores them on disk.
 
-    Parameters
-    ----------
-    bag: Dask Bag
-        A Bag holding (possibly nested) dicts that can serialized as json
-    file_name: str)
-        The name of the file to store on disk
-    out_dir: str or Path
-        A path to the directory where the file is stored
+#     Converts a dask bag holding data from a CBS table to Parquet form
+#     and stores it on disk. The bag should be filled by dicts (can be nested)
+#     which can be serialized as json.
 
-    Returns
-    -------
-    pq_path: Path
-        The path to the output parquet file
-    """
+#     The current implementation iterates over each bag partition and dumps
+#     it into a json file, then appends all file into a single json file. That
+#     json file is then read into a PyArrow table, and finally that table is
+#     written as a parquet file to disk.
 
-    # create directories to store files
-    out_dir = Path(out_dir)
-    temp_json_dir = out_dir.parent / Path(f"json/{file_name}")
-    create_dir(temp_json_dir)
-    create_dir(out_dir)
+#     Parameters
+#     ----------
+#     bag: Dask Bag
+#         A Bag holding (possibly nested) dicts that can serialized as json
+#     file_name: str)
+#         The name of the file to store on disk
+#     out_dir: str or Path
+#         A path to the directory where the file is stored
 
-    # File path to dump table as ndjson
-    json_path = Path(f"{temp_json_dir}/{file_name}.json")
-    # File path to create as parquet file
-    pq_path = Path(f"{out_dir}/{file_name}.parquet")
+#     Returns
+#     -------
+#     pq_path: Path
+#         The path to the output parquet file
+#     """
 
-    # # Convert bag to parquet #TODO: Check if this method is better then all the file handling below.
-    # # NOTE: this outputs a folder, named (i.e.) "cbs.v3.83583NED_TypedDataSet.parquet", and nests files underneath,
-    # # such as "part.0.parquet", as well as "_metadata" (can be avoided using `write_metadata_file=False`), and "_common_metadata".
-    # bag.to_dataframe().to_parquet(pq_path)
+#     # create directories to store files
+#     out_dir = Path(out_dir)
+#     temp_json_dir = out_dir.parent / Path(f"json/{file_name}")
+#     create_dir(temp_json_dir)
+#     create_dir(out_dir)
 
-    # Dump each bag partition to json file
-    print(f"Dumping bag to textfiles for {file_name}")
-    try:
-        bag.map(ndjson.dumps).to_textfiles(temp_json_dir / "*.json")
-    except TypeError:
-        return None  # TODO: Is this OK???
-    print(f"Finished dumping bag to textfiles for {file_name}")
-    # Get all json file names with path
-    filenames = [f for f in temp_json_dir.glob("*.json")]
-    # Append all ndjsons into a single ndjson file
-    print(f"Starting to concatanate files for {file_name}")
-    with open(json_path, "w+") as json_file:
-        for fn in filenames:
-            with open(Path(fn), "r") as f:
-                json_file.write(f.read())
-            remove(fn)
-    print(f"Concluded concatanating files for {file_name}")
+#     # File path to dump table as ndjson
+#     json_path = Path(f"{temp_json_dir}/{file_name}.json")
+#     # File path to create as parquet file
+#     pq_path = Path(f"{out_dir}/{file_name}.parquet")
 
-    # Create PyArrow table from ndjson file
-    pa_table = pa_json.read_json(json_path)
+#     # # Convert bag to parquet #TODO: Check if this method is better then all the file handling below.
+#     # # NOTE: this outputs a folder, named (i.e.) "cbs.v3.83583NED_TypedDataSet.parquet", and nests files underneath,
+#     # # such as "part.0.parquet", as well as "_metadata" (can be avoided using `write_metadata_file=False`), and "_common_metadata".
+#     # bag.to_dataframe().to_parquet(pq_path)
 
-    # Field names with "." are not allowed when reading the file in BQ
-    new_column_names = [name.replace(".", "_") for name in pa_table.column_names]
-    pa_table = pa_table.rename_columns(new_column_names)
+#     # Dump each bag partition to json file
+#     print(f"Dumping bag to textfiles for {file_name}")
+#     bag.compute()
+#     # try:
+#     #     bag.map(ndjson.dumps).to_textfiles(temp_json_dir / "*.json")
+#     # except TypeError:
+#     #     return None  # TODO: Is this OK???
+#     print(f"Finished dumping bag to textfiles for {file_name}")
+#     # Get all json file names with path
+#     filenames = [f for f in temp_json_dir.glob("*.ndjson")]
+#     # Append all ndjsons into a single ndjson file
+#     print(f"Starting to concatanate files for {file_name}")
+#     with open(json_path, "w+") as json_file:
+#         for fn in filenames:
+#             with open(Path(fn), "r") as f:
+#                 json_file.write(f.read())
+#             remove(fn)
+#     print(f"Concluded concatanating files for {file_name}")
 
-    # Store parquet table #TODO -> set proper data types in parquet file
-    pq.write_table(pa_table, pq_path)
+#     # Create PyArrow table from ndjson file
+#     pa_table = pa_json.read_json(json_path)
 
-    # Remove temp ndjson file
-    remove(json_path)
+#     # Field names with "." are not allowed when reading the file in BQ
+#     new_column_names = [name.replace(".", "_") for name in pa_table.column_names]
+#     pa_table = pa_table.rename_columns(new_column_names)
 
-    return pq_path
+#     # Store parquet table #TODO -> set proper data types in parquet file
+#     pq.write_table(pa_table, pq_path)
+
+#     # Remove temp ndjson file
+#     remove(json_path)
+
+#     return pq_path
 
 
 def set_gcp(config: Config, gcp_env: str, source: str) -> GcpProject:
@@ -1273,13 +1293,15 @@ def generate_table_urls(base_url: str, n_records: int, odata_version: str) -> li
     return table_urls
 
 
-def load_from_url(target_url: str):
-    """Fetch json formatted data from a specific CBS table url.
+def url_to_ndjson(target_url: str, ndjson_folder: Union[Path, str]):
+    """Fetch json formatted data from a specific CBS table url and write each page as n ndjson file.
 
     Parameters
     ----------
     target_url : str
         The url to fetch from
+    ndjson_folder : str or Path
+        The folder to store all output files
 
     Returns
     -------
@@ -1298,8 +1320,17 @@ def load_from_url(target_url: str):
     )  # TODO - Bubble print statement to logging in general and in Prefect
     r = requests.get(target_url).json()
     if r["value"]:
-        return r["value"]
-    else:
+        # Write as ndjson
+        filename = (
+            f"page_{int(target_url.split('skip=')[-1])//10000}.ndjson"
+            if "skip" in target_url
+            else "page_0.ndjson"
+        )
+        path = Path(ndjson_folder) / Path(filename)
+        with open(path, "w+") as f:
+            ndjson.dump(r["value"], f)
+        return path
+    else:  # TODO - is this needed? If so, what should happen here?
         return None
         # raise FileNotFoundError
 
@@ -1326,7 +1357,7 @@ def tables_to_parquet(
     source : str, default='cbs
         The source of the dataset.
     pq_dir : Path or str
-        The directory where the putput Parquet files are stored.
+        The directory where the output Parquet files are stored.
 
     Returns
     -------
@@ -1380,18 +1411,31 @@ def tables_to_parquet(
                 url, table_shape["n_observations"], odata_version
             )
 
-        # Get table as a dask bag
-        table = get_odata(table_urls=table_urls)
+        # create directories to store files
+        pq_dir = Path(pq_dir)
+        ndjson_dir = pq_dir.parent / Path(f"ndjson/{table_name}")
+        create_dir(pq_dir)
+        create_dir(ndjson_dir)
+
+        # Fetch all urls and dump each as ndjson
+        ndjsons_paths = (
+            db.from_sequence(table_urls)
+            .map(url_to_ndjson, ndjson_folder=ndjson_dir)
+            .compute()
+        )
+        # table = get_odata(table_urls=table_urls)
 
         # Convert to parquet
         print(
             f"Starting convert_table_to_parquet for table {table_name}"
         )  # TODO Convert to logging, add pq_dir to INFO
-        pq_path = convert_table_to_parquet(
-            bag=table,
+        pq_path = convert_ndjsons_to_parquet(
+            files=ndjsons_paths,
+            # urls=table_urls,
+            # bag=table,
             file_name=table_name,
             out_dir=pq_dir,
-            odata_version=odata_version,
+            # odata_version=odata_version,
         )
         print()
         print(f"Finished convert_table_to_parquet for table {table_name}")
@@ -1702,7 +1746,7 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    main("83583NED", config=config, gcp_env="prod", force=True)
+    main("83583NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
     # main("83765NED", config=config, gcp_env="dev", force=True)
     # Test IV3 dataset, odata_version is v3
