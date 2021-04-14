@@ -6,12 +6,14 @@ import json
 from datetime import datetime
 from shutil import rmtree
 from tempfile import gettempdir
+import xml.etree.ElementTree as ET
 
 import ndjson
 from dask.bag import Bag as DaskBag
 import dask.bag as db
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
+import pyarrow as pa
 from google.cloud import storage
 from google.cloud import bigquery
 from google.api_core import exceptions
@@ -164,6 +166,71 @@ def get_main_table_shape(metadata: dict) -> dict:
         "n_observations": get_from_meta(metadata, "ObservationCount"),
     }
     return main_table_shape
+
+
+def get_schema_cbs(metadata_url) -> pa.Schema:
+    """Returns a pyarrow.Schema for a cbs dataset given its base metadata url.
+
+    Parameters
+    ----------
+    metadata_url : [type]
+        [description]
+    """
+    odata_to_pa_hash = {
+        "Edm.Int32": pa.int32(),
+        "Edm.String": pa.string(),
+        "Edm.Single": pa.float32(),
+    }
+    # TODO complete full list
+    # odata.types taken from: http://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#Picture 1:~:text=4.4%20Primitive%20Types,-Structured
+    # pyarrow types taken from: https://arrow.apache.org/docs/python/api/datatypes.html
+    # odata_to_pa_hash = {
+    #     'Edm.Binary': pa.binary(),
+    #     'Edm.Boolean': pa.bool_(),
+    #     'Edm.Byte': pa.int8(),
+    # #     'Edm.Date': pa.date32(), or pa.date64(), or something else?
+    # #     'Edm.DateTimeOffset': pa.timestamp() #Likely requires some wrangling to match
+    #     'Edm.Decimal':
+    #     'Edm.Double'
+    #     'Edm.Duration'
+    #     'Edm.Guid'
+    #     'Edm.Int16'
+    #     'Edm.Int32'
+    #     'Edm.Int64'
+    #     'Edm.SByte'
+    #     'Edm.Single': pa.float32(),
+    #     'Edm.Stream'
+    #     'Edm.String'
+    #     'Edm.TimeOfDay'
+    #     'Edm.Geography'
+    #     'Edm.GeographyPoint'
+    #     'Edm.GeographyLineString'
+    #     'Edm.GeographyPolygon'
+    #     'Edm.GeographyMultiPoint'
+    #     'Edm.GeographyMultiLineString'
+    #     'Edm.GeographyMultiPolygon'
+    #     'Edm.GeographyCollection'
+    #     'Edm.Geometry'
+    #     'Edm.GeometryPoint'
+    #     'Edm.GeometryLineString'
+    #     'Edm.GeometryPolygon'
+    #     'Edm.GeometryMultiPoint'
+    #     'Edm.GeometryMultiLineString'
+    #     'Edm.GeometryMultiPolygon'
+    #     'Edm.GeometryCollection'
+    # }
+    r = requests.get(metadata_url)
+    root = ET.fromstring(r.content)
+    TData = root.find(".//*[@Name='TData']")
+    schema = []
+    for item in TData.iter():
+        if "Type" in item.attrib.keys():
+            # TODO: Add property facets for relevant types
+            # see http://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#Picture 1:~:text=6.2%20Property%20Facets,-Property
+            schema.append((item.attrib["Name"], item.attrib["Type"]))
+    schema = [(field[0], odata_to_pa_hash[field[1]]) for field in schema]
+    schema = pa.schema(schema)
+    return schema
 
 
 def get_latest_folder(
@@ -564,14 +631,16 @@ def get_column_descriptions_v3(url_data_properties: str) -> dict:
 
 
 def convert_ndjsons_to_parquet(
-    files: List[Path], file_name: str, out_dir: Union[Path, str]
+    files: List[Path], file_name: str, out_dir: Union[Path, str], schema: pa.Schema
 ) -> Path:
     pq_file = Path(f"{out_dir}/{file_name}.parquet")
-    schema = pa_json.read_json(files[0]).schema
+    if not schema:
+        schema = pa_json.read_json(files[0]).schema
     with pq.ParquetWriter(pq_file, schema) as writer:
+        parse_options = pa_json.ParseOptions(explicit_schema=schema)
         for f in files:
             print(f"Processing {f}")
-            table = pa_json.read_json(f)
+            table = pa_json.read_json(f, parse_options=parse_options)
             writer.write_table(table)
             remove(f)
     return pq_file
@@ -1394,12 +1463,15 @@ def tables_to_parquet(
         if key in ("TypedDataSet", "Observations"):
             # if key in ("TypedDataSet"):
             table_shape = main_table_shape
+            metadata_url = "/".join(url.split("/")[:-1]) + "/$metadata"
+            schema = get_schema_cbs(metadata_url)
         else:
             table_shape = {
                 "n_records": None,
                 "n_columns": None,
                 "n_observations": None,
             }  # TODO: A better way to default on non-main tables?
+            schema = None
 
         if odata_version == "v3":
             # Generate all table urls
@@ -1435,6 +1507,7 @@ def tables_to_parquet(
             # bag=table,
             file_name=table_name,
             out_dir=pq_dir,
+            schema=schema
             # odata_version=odata_version,
         )
         print()
