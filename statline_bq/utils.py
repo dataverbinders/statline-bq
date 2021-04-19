@@ -161,9 +161,9 @@ def get_main_table_shape(metadata: dict) -> dict:
         The dataset's main table's shape
     """
     main_table_shape = {
-        "n_records": get_from_meta(metadata, "RecordCount"),
-        "n_columns": get_from_meta(metadata, "ColumnCount"),
-        "n_observations": get_from_meta(metadata, "ObservationCount"),
+        "n_records": metadata.get("RecordCount"),
+        "n_columns": metadata.get("ColumnCount"),
+        "n_observations": metadata.get("ObservationCount"),
     }
     return main_table_shape
 
@@ -228,7 +228,9 @@ def get_schema_cbs(metadata_url) -> pa.Schema:
             # TODO: Add property facets for relevant types
             # see http://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#Picture 1:~:text=6.2%20Property%20Facets,-Property
             schema.append((item.attrib["Name"], item.attrib["Type"]))
-    schema = [(field[0], odata_to_pa_hash[field[1]]) for field in schema]
+    schema = [
+        (field[0], odata_to_pa_hash.get(field[1], pa.string())) for field in schema
+    ]
     schema = pa.schema(schema)
     return schema
 
@@ -371,28 +373,10 @@ def dict_to_json_file(
     return json_file
 
 
-def get_from_meta(meta: dict, key: str):
-    """Wrapper function to dict.get()
-
-    Parameters
-    ----------
-    meta : dict
-        A dictionary holding a dataset's parameters
-    key : str
-        [description]
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
-    return meta.get(key, None)
-
-
 def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
     if not force:
         try:
-            gcp_modified = get_from_meta(meta=gcp_meta, key="Modified")
+            gcp_modified = gcp_meta.get("Modified")
         except AttributeError:
             gcp_modified = None
     else:
@@ -1110,7 +1094,7 @@ def cbsodata_to_gbq(
 
     ## Check if upload is needed
     # Get dataset modified date from source metadata
-    cbs_modified = get_from_meta(meta=source_meta, key="Modified")
+    cbs_modified = source_meta.get("Modified")
     # Get datatset modified date from GCP metadata (set to None if force is True)
     gcp_modified = get_gcp_modified(gcp_meta, force)
     # Skip all process if modified date is the same in GCP and source (and Force is set to False)
@@ -1723,9 +1707,9 @@ def gcs_to_gbq(
     description = None
     if meta_gcp:
         if odata_version == "v3":
-            description = get_from_meta(meta_gcp, key="ShortDescription")
+            description = meta_gcp.get("ShortDescription")
         elif odata_version == "v4":
-            description = get_from_meta(meta_gcp, key="Description")
+            description = meta_gcp.get("Description")
         else:
             raise ValueError("odata version must be either 'v3' or 'v4'")
 
