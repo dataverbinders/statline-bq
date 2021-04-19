@@ -176,49 +176,45 @@ def get_schema_cbs(metadata_url) -> pa.Schema:
     metadata_url : [type]
         [description]
     """
-    odata_to_pa_hash = {
-        "Edm.Int32": pa.int32(),
-        "Edm.String": pa.string(),
-        "Edm.Single": pa.float32(),
-    }
     # TODO complete full list
     # odata.types taken from: http://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#Picture 1:~:text=4.4%20Primitive%20Types,-Structured
     # pyarrow types taken from: https://arrow.apache.org/docs/python/api/datatypes.html
-    # odata_to_pa_hash = {
-    #     'Edm.Binary': pa.binary(),
-    #     'Edm.Boolean': pa.bool_(),
-    #     'Edm.Byte': pa.int8(),
-    # #     'Edm.Date': pa.date32(), or pa.date64(), or something else?
-    # #     'Edm.DateTimeOffset': pa.timestamp() #Likely requires some wrangling to match
-    #     'Edm.Decimal':
-    #     'Edm.Double'
-    #     'Edm.Duration'
-    #     'Edm.Guid'
-    #     'Edm.Int16'
-    #     'Edm.Int32'
-    #     'Edm.Int64'
-    #     'Edm.SByte'
-    #     'Edm.Single': pa.float32(),
-    #     'Edm.Stream'
-    #     'Edm.String'
-    #     'Edm.TimeOfDay'
-    #     'Edm.Geography'
-    #     'Edm.GeographyPoint'
-    #     'Edm.GeographyLineString'
-    #     'Edm.GeographyPolygon'
-    #     'Edm.GeographyMultiPoint'
-    #     'Edm.GeographyMultiLineString'
-    #     'Edm.GeographyMultiPolygon'
-    #     'Edm.GeographyCollection'
-    #     'Edm.Geometry'
-    #     'Edm.GeometryPoint'
-    #     'Edm.GeometryLineString'
-    #     'Edm.GeometryPolygon'
-    #     'Edm.GeometryMultiPoint'
-    #     'Edm.GeometryMultiLineString'
-    #     'Edm.GeometryMultiPolygon'
-    #     'Edm.GeometryCollection'
-    # }
+    odata_to_pa_hash = {
+        "Edm.Binary": pa.binary(),
+        "Edm.Boolean": pa.bool_(),
+        "Edm.Byte": pa.int8(),
+        # 'Edm.Date': pa.date32(), or pa.date64(), or something else?
+        # 'Edm.DateTimeOffset': pa.timestamp() #Likely requires some wrangling to match
+        # "Edm.Decimal": pa.decimal128(),  # TODO: Add precision and scale (see facets below)
+        "Edm.Double": pa.float64(),
+        # 'Edm.Duration': #TODO ??
+        # 'Edm.Guid': #TODO ??
+        "Edm.Int16": pa.int16(),
+        "Edm.Int32": pa.int32(),
+        "Edm.Int64": pa.int64(),
+        "Edm.SByte": pa.int8(),
+        "Edm.Single": pa.float32(),
+        # 'Edm.Stream': #TODO ??
+        "Edm.String": pa.string(),
+        # 'Edm.TimeOfDay': #TODO ??
+        # TODO: add geodata translation:
+        # 'Edm.Geography'
+        # 'Edm.GeographyPoint'
+        # 'Edm.GeographyLineString'
+        # 'Edm.GeographyPolygon'
+        # 'Edm.GeographyMultiPoint'
+        # 'Edm.GeographyMultiLineString'
+        # 'Edm.GeographyMultiPolygon'
+        # 'Edm.GeographyCollection'
+        # 'Edm.Geometry'
+        # 'Edm.GeometryPoint'
+        # 'Edm.GeometryLineString'
+        # 'Edm.GeometryPolygon'
+        # 'Edm.GeometryMultiPoint'
+        # 'Edm.GeometryMultiLineString'
+        # 'Edm.GeometryMultiPolygon'
+        # 'Edm.GeometryCollection'
+    }
     r = requests.get(metadata_url)
     root = ET.fromstring(r.content)
     TData = root.find(".//*[@Name='TData']")
