@@ -168,13 +168,20 @@ def get_main_table_shape(metadata: dict) -> dict:
     return main_table_shape
 
 
-def get_schema_cbs(metadata_url) -> pa.Schema:
-    """Returns a pyarrow.Schema for a cbs dataset given its base metadata url.
+def get_schema_cbs(metadata_url, odata_version) -> pa.Schema:
+    """Returns a pyarrow.Schema for the main table of a cbs dataset given its base metadata url.
 
     Parameters
     ----------
-    metadata_url : [type]
-        [description]
+    metadata_url : str
+        A url containing the metadata of the dataset
+    odata_version : str
+        The version of the OData for this dataset - should be "v3" or "v4".
+
+    Returns
+    -------
+    schema : pa.Schema
+        A pyarrow Schema object for the main table of the dataset
     """
     # TODO complete full list
     # odata.types taken from: http://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#Picture 1:~:text=4.4%20Primitive%20Types,-Structured
@@ -1211,11 +1218,14 @@ def generate_table_urls(base_url: str, n_records: int, odata_version: str) -> li
     # Since v3 already has a parameter ("?$format=json"), the v3 and v4 connectors are different
     connector = {"v3": "&", "v4": "?"}
     cbs_limit = {"v3": 10000, "v4": 100000}
-    # Only the main table has more then 10000 rows, the other tables use None
+    trailing_zeros = {"v3": 4, "v4": 5}
+    # Only the main table has more then 10000(/100000 for v4) rows, the other tables use None
     if n_records is not None:
         # Create url list with query parameters
         table_urls = [
-            base_url + f"{connector[odata_version]}$skip={str(i+1)}0000"
+            base_url
+            + f"{connector[odata_version]}$skip={str(i+1)}"
+            + ("0" * trailing_zeros[odata_version])
             for i in range(n_records // cbs_limit[odata_version])
         ]
         # Add base url to list
@@ -1254,7 +1264,7 @@ def url_to_ndjson(target_url: str, ndjson_folder: Union[Path, str]):
     if r["value"]:
         # Write as ndjson
         filename = (
-            f"page_{int(target_url.split('skip=')[-1])//10000}.ndjson"
+            f"page_{int(target_url.split('skip=')[-1])//10000}.ndjson"  # TODO: this is built for v3 - v4 datasets inappropriately names the files page_10, page_20, page_30, etc.
             if "skip" in target_url
             else "page_0.ndjson"
         )
@@ -1327,7 +1337,9 @@ def tables_to_parquet(
             # if key in ("TypedDataSet"):
             table_shape = main_table_shape
             metadata_url = "/".join(url.split("/")[:-1]) + "/$metadata"
-            schema = get_schema_cbs(metadata_url)
+            # TODO: add support for v4 (getting 406 error on requests inside get_schema_cbs)
+            if odata_version == "v3":
+                schema = get_schema_cbs(metadata_url, odata_version)
         else:
             table_shape = {
                 "n_records": None,
@@ -1683,9 +1695,9 @@ if __name__ == "__main__":
     # main("83583NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
     main("83765NED", config=config, gcp_env="dev", force=True)
-    # Test IV3 dataset, odata_version is v3
+    # Test external dataset, odata_version is v3
     # main(
-    #     "40060NED",
+    #     "40061NED",
     #     source="mlz",
     #     third_party=True,
     #     config=config,
