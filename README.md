@@ -24,14 +24,17 @@ Using Poetry:
 
 There are two elements that need to be configured prior to using the CLI. If using as an imported library the exact usage determines wheteher these are both needed (or just one, or none)
 
-#### 1. GCP and Paths through config.toml
+#### 1. GCP and Paths through `config.toml`
 
-The GCP project id, bucket, and location should be given by editing `statline_bq/config.toml`, allowing uup to 3 choices at runtime: `dev`, `test` and `prod`. Note that you must nest gcp projects details correctly for them to be interperted, as seen below. You must have the proper IAM (permissions) on the GCP projects (more details below).
+##### 1.1. GCP
+The GCP project id, bucket, and location should be provided by editing `statline_bq/config.toml`, allowing up to 3 choices at runtime: `dev`, `test` and `prod`. `prod` is further divided into 3: `cbs_dl` serving as a data lake for the BASE CBS catalog, `external_dl` serving as a data lake for the THIRD-PARTY catalog and `dwh`, meant for any additional or combined resources. The selection within the three `prod` environments is automatically inferred at runtime, according to the `source` parameter.
+
+Note that you must nest gcp projects details correctly for them to be interperted, as seen below. You must also have the proper IAM (permissions) on the GCP projects (more details below).
 
 Correct nesting in config file:
 ```
 [gcp]
-    [gcp.prod]
+    [gcp.dev]
     project_id = "my_dev_project_id"
     bucket = "my_dev_bucket"
     location = "EU"
@@ -42,11 +45,23 @@ Correct nesting in config file:
     location = "EU"
 
     [gcp.prod]
-    project_id = "my_prod_project_id"
-    bucket = "my_prod_bucket"
-    location = "EU"
+        [gcp.prod.cbs_dl]
+        project_id = "my-cbs-dl"
+        bucket = "my-cbs-dl_bucket"
+        location = "EU"
+
+        [gcp.prod.external_dl]
+        project_id = "my-external-dl"
+        bucket = "my-external-dl_bucket"
+        location = "EU"
+
+        [gcp.prod.dwh]
+        project_id = "my-open-dwh"
+        bucket = "my-open-dwh_bucket"
+        location = "EU"
 ```
-Additionally, the local paths used by the library can configured here. Under `[paths]` define the path to the library, and other temporary folders if desired.
+##### 1.2. Paths
+Additionally, the local temp paths used by the library can be configured here. If a new `source` is used, it must be added both in `config.toml` under `[paths]` and in `config.py` to the `Paths` Class.
 
 #### 2. Datasets through `datasets.toml`
 
@@ -61,11 +76,17 @@ This should be given by directly editing `statline_bq/datasets.toml`
 statline-bq can be used via a command line, or imported as a library.
 
 #### CLI
-Once the library is installed and configured:
+Once the library is installed and configured, you can either used `poetry run`:
 
 1. From your terminal, navigate to "my_path_to_library/statline-bq/statline_bq/"
 2. run `poetry run statline-bq`
 3. That's it!
+
+Or spawn a shell:
+
+1. From your terminal, navigate to "my_path_to_library/statline-bq/statline_bq/"
+2. run `poetry shell`
+3. run `statline-bq --help` for info
 
 #### In a python script
 
