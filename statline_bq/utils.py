@@ -1070,8 +1070,8 @@ def cbsodata_to_gbq(
             credentials=credentials,
         )
 
-    # Remove all local files for this process
-    rmtree(pq_dir.parent)
+    # Remove all local files created for this process
+    rmtree(pq_dir.parents[1])
 
     return files_parquet  # TODO: return bq job ids
 
@@ -1691,9 +1691,9 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    # main("83583NED", config=config, gcp_env="dev", force=True)
+    main("83583NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
-    main("83765NED", config=config, gcp_env="dev", force=True)
+    # main("83765NED", config=config, gcp_env="dev", force=True)
     # Test external dataset, odata_version is v3
     # main(
     #     "40061NED",
