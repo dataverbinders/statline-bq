@@ -1671,7 +1671,7 @@ def main(
         print(f"Processing dataset {id}")
         # print("TEST CHANGES")
         odata_version = check_v4(id=id, third_party=third_party)
-        cbsodata_to_gbq(
+        files_parquet = cbsodata_to_gbq(
             id=id,
             odata_version=odata_version,
             third_party=third_party,
@@ -1683,7 +1683,9 @@ def main(
         print(
             f"Completed dataset {id}"
         )  # TODO - add response from google if possible (some success/failure flag)
-        return None
+        pq_file = Path(files_parquet.pop())
+        local_folder = pq_file.parents[2]
+        return local_folder
 
 
 if __name__ == "__main__":
@@ -1691,7 +1693,7 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    main("83583NED", config=config, gcp_env="dev", force=True)
+    local_folder = main("83583NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
     # main("83765NED", config=config, gcp_env="dev", force=True)
     # Test external dataset, odata_version is v3
@@ -1703,3 +1705,4 @@ if __name__ == "__main__":
     #     gcp_env="dev",
     #     force=True,
     # )
+    print(local_folder)
