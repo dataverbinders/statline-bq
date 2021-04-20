@@ -6,10 +6,11 @@ import json
 from datetime import datetime
 from shutil import rmtree
 from tempfile import gettempdir
+import xml.etree.ElementTree as ET
 
 import ndjson
-from dask.bag import Bag as DaskBag
 import dask.bag as db
+import pyarrow as pa
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
 from google.cloud import storage
@@ -159,11 +160,81 @@ def get_main_table_shape(metadata: dict) -> dict:
         The dataset's main table's shape
     """
     main_table_shape = {
-        "n_records": get_from_meta(metadata, "RecordCount"),
-        "n_columns": get_from_meta(metadata, "ColumnCount"),
-        "n_observations": get_from_meta(metadata, "ObservationCount"),
+        "n_records": metadata.get("RecordCount"),
+        "n_columns": metadata.get("ColumnCount"),
+        "n_observations": metadata.get("ObservationCount"),
     }
     return main_table_shape
+
+
+def get_schema_cbs(metadata_url, odata_version) -> pa.Schema:
+    """Returns a pyarrow.Schema for the main table of a cbs dataset given its base metadata url.
+
+    Parameters
+    ----------
+    metadata_url : str
+        A url containing the metadata of the dataset
+    odata_version : str
+        The version of the OData for this dataset - should be "v3" or "v4".
+
+    Returns
+    -------
+    schema : pa.Schema
+        A pyarrow Schema object for the main table of the dataset
+    """
+    # TODO complete full list
+    # odata.types taken from: http://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#Picture 1:~:text=4.4%20Primitive%20Types,-Structured
+    # pyarrow types taken from: https://arrow.apache.org/docs/python/api/datatypes.html
+    odata_to_pa_hash = {
+        "Edm.Binary": pa.binary(),
+        "Edm.Boolean": pa.bool_(),
+        "Edm.Byte": pa.int8(),
+        # 'Edm.Date': pa.date32(), or pa.date64(), or something else?
+        # 'Edm.DateTimeOffset': pa.timestamp() #Likely requires some wrangling to match
+        # "Edm.Decimal": pa.decimal128(),  # TODO: Add precision and scale (see facets below)
+        "Edm.Double": pa.float64(),
+        # 'Edm.Duration': #TODO ??
+        # 'Edm.Guid': #TODO ??
+        "Edm.Int16": pa.int16(),
+        "Edm.Int32": pa.int32(),
+        "Edm.Int64": pa.int64(),
+        "Edm.SByte": pa.int8(),
+        "Edm.Single": pa.float32(),
+        # 'Edm.Stream': #TODO ??
+        "Edm.String": pa.string(),
+        # 'Edm.TimeOfDay': #TODO ??
+        # TODO: add geodata translation:
+        # 'Edm.Geography'
+        # 'Edm.GeographyPoint'
+        # 'Edm.GeographyLineString'
+        # 'Edm.GeographyPolygon'
+        # 'Edm.GeographyMultiPoint'
+        # 'Edm.GeographyMultiLineString'
+        # 'Edm.GeographyMultiPolygon'
+        # 'Edm.GeographyCollection'
+        # 'Edm.Geometry'
+        # 'Edm.GeometryPoint'
+        # 'Edm.GeometryLineString'
+        # 'Edm.GeometryPolygon'
+        # 'Edm.GeometryMultiPoint'
+        # 'Edm.GeometryMultiLineString'
+        # 'Edm.GeometryMultiPolygon'
+        # 'Edm.GeometryCollection'
+    }
+    r = requests.get(metadata_url)
+    root = ET.fromstring(r.content)
+    TData = root.find(".//*[@Name='TData']")
+    schema = []
+    for item in TData.iter():
+        if "Type" in item.attrib.keys():
+            # TODO: Add property facets for relevant types
+            # see http://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#Picture 1:~:text=6.2%20Property%20Facets,-Property
+            schema.append((item.attrib["Name"], item.attrib["Type"]))
+    schema = [
+        (field[0], odata_to_pa_hash.get(field[1], pa.string())) for field in schema
+    ]
+    schema = pa.schema(schema)
+    return schema
 
 
 def get_latest_folder(
@@ -304,28 +375,10 @@ def dict_to_json_file(
     return json_file
 
 
-def get_from_meta(meta: dict, key: str):
-    """Wrapper function to dict.get()
-
-    Parameters
-    ----------
-    meta : dict
-        A dictionary holding a dataset's parameters
-    key : str
-        [description]
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
-    return meta.get(key, None)
-
-
 def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
     if not force:
         try:
-            gcp_modified = get_from_meta(meta=gcp_meta, key="Modified")
+            gcp_modified = gcp_meta.get("Modified")
         except AttributeError:
             gcp_modified = None
     else:
@@ -530,115 +583,20 @@ def get_column_descriptions_v3(url_data_properties: str) -> dict:
     return col_desc
 
 
-def get_odata(table_urls: list) -> DaskBag:
-    """Create a dask.bag object holding all values of a table for a CBS dataset
-
-    This functions maps `load_from_url()` on a list of urls, all related to a single
-    CBS table, from a specific dataset. Since requests to CBS are limited at 10,000
-    rows (=observations/records), the table_urls consists of the same base url, each ending with "$?SKIP={i}",
-    where i is an integer with multiples of 10,000, i.e.:
-
-    [
-        "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json",
-        "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json&$skip=10000"
-        "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TypedDataSet?$format=json&$skip=20000"
-        ...
-        ...
-    ]
-
-    Parameters
-    ----------
-    table_urls: list of str
-        A list of valid urls of a table from CBS
-
-    Returns
-    -------
-    bag: Dask Bag
-        The values included in table_urls as json type, as a single Dask bag
-    """
-    print("Creating bag")
-    bag = db.from_sequence(table_urls).map(load_from_url)
-    print("Created bag")
-    return bag
-
-
-def convert_table_to_parquet(
-    bag, file_name: str, out_dir: Union[str, Path], odata_version: str
-) -> Path:  # (TODO -> IS THERE A FASTER/BETTER WAY??)
-    """Converts a Dask Bag to Parquet files and stores them on disk.
-
-    Converts a dask bag holding data from a CBS table to Parquet form
-    and stores it on disk. The bag should be filled by dicts (can be nested)
-    which can be serialized as json.
-
-    The current implementation iterates over each bag partition and dumps
-    it into a json file, then appends all file into a single json file. That
-    json file is then read into a PyArrow table, and finally that table is
-    written as a parquet file to disk.
-
-    Parameters
-    ----------
-    bag: Dask Bag
-        A Bag holding (possibly nested) dicts that can serialized as json
-    file_name: str)
-        The name of the file to store on disk
-    out_dir: str or Path
-        A path to the directory where the file is stored
-
-    Returns
-    -------
-    pq_path: Path
-        The path to the output parquet file
-    """
-
-    # create directories to store files
-    out_dir = Path(out_dir)
-    temp_json_dir = out_dir.parent / Path(f"json/{file_name}")
-    create_dir(temp_json_dir)
-    create_dir(out_dir)
-
-    # File path to dump table as ndjson
-    json_path = Path(f"{temp_json_dir}/{file_name}.json")
-    # File path to create as parquet file
-    pq_path = Path(f"{out_dir}/{file_name}.parquet")
-
-    # # Convert bag to parquet #TODO: Check if this method is better then all the file handling below.
-    # # NOTE: this outputs a folder, named (i.e.) "cbs.v3.83583NED_TypedDataSet.parquet", and nests files underneath,
-    # # such as "part.0.parquet", as well as "_metadata" (can be avoided using `write_metadata_file=False`), and "_common_metadata".
-    # bag.to_dataframe().to_parquet(pq_path)
-
-    # Dump each bag partition to json file
-    print(f"Dumping bag to textfiles for {file_name}")
-    try:
-        bag.map(ndjson.dumps).to_textfiles(temp_json_dir / "*.json")
-    except TypeError:
-        return None  # TODO: Is this OK???
-    print(f"Finished dumping bag to textfiles for {file_name}")
-    # Get all json file names with path
-    filenames = [f for f in temp_json_dir.glob("*.json")]
-    # Append all ndjsons into a single ndjson file
-    print(f"Starting to concatanate files for {file_name}")
-    with open(json_path, "w+") as json_file:
-        for fn in filenames:
-            with open(Path(fn), "r") as f:
-                json_file.write(f.read())
-            remove(fn)
-    print(f"Concluded concatanating files for {file_name}")
-
-    # Create PyArrow table from ndjson file
-    pa_table = pa_json.read_json(json_path)
-
-    # Field names with "." are not allowed when reading the file in BQ
-    new_column_names = [name.replace(".", "_") for name in pa_table.column_names]
-    pa_table = pa_table.rename_columns(new_column_names)
-
-    # Store parquet table #TODO -> set proper data types in parquet file
-    pq.write_table(pa_table, pq_path)
-
-    # Remove temp ndjson file
-    remove(json_path)
-
-    return pq_path
+def convert_ndjsons_to_parquet(
+    files: List[Path], file_name: str, out_dir: Union[Path, str], schema: pa.Schema
+) -> Path:
+    pq_file = Path(f"{out_dir}/{file_name}.parquet")
+    if not schema:
+        schema = pa_json.read_json(files[0]).schema
+    with pq.ParquetWriter(pq_file, schema) as writer:
+        parse_options = pa_json.ParseOptions(explicit_schema=schema)
+        for f in files:
+            print(f"Processing {f}")
+            table = pa_json.read_json(f, parse_options=parse_options)
+            writer.write_table(table)
+            remove(f)
+    return pq_file
 
 
 def set_gcp(config: Config, gcp_env: str, source: str) -> GcpProject:
@@ -1021,7 +979,7 @@ def cbsodata_to_gbq(
 
     ## Check if upload is needed
     # Get dataset modified date from source metadata
-    cbs_modified = get_from_meta(meta=source_meta, key="Modified")
+    cbs_modified = source_meta.get("Modified")
     # Get datatset modified date from GCP metadata (set to None if force is True)
     gcp_modified = get_gcp_modified(gcp_meta, force)
     # Skip all process if modified date is the same in GCP and source (and Force is set to False)
@@ -1259,11 +1217,14 @@ def generate_table_urls(base_url: str, n_records: int, odata_version: str) -> li
     # Since v3 already has a parameter ("?$format=json"), the v3 and v4 connectors are different
     connector = {"v3": "&", "v4": "?"}
     cbs_limit = {"v3": 10000, "v4": 100000}
-    # Only the main table has more then 10000 rows, the other tables use None
+    trailing_zeros = {"v3": 4, "v4": 5}
+    # Only the main table has more then 10000(/100000 for v4) rows, the other tables use None
     if n_records is not None:
         # Create url list with query parameters
         table_urls = [
-            base_url + f"{connector[odata_version]}$skip={str(i+1)}0000"
+            base_url
+            + f"{connector[odata_version]}$skip={str(i+1)}"
+            + ("0" * trailing_zeros[odata_version])
             for i in range(n_records // cbs_limit[odata_version])
         ]
         # Add base url to list
@@ -1273,13 +1234,15 @@ def generate_table_urls(base_url: str, n_records: int, odata_version: str) -> li
     return table_urls
 
 
-def load_from_url(target_url: str):
-    """Fetch json formatted data from a specific CBS table url.
+def url_to_ndjson(target_url: str, ndjson_folder: Union[Path, str]):
+    """Fetch json formatted data from a specific CBS table url and write each page as n ndjson file.
 
     Parameters
     ----------
     target_url : str
         The url to fetch from
+    ndjson_folder : str or Path
+        The folder to store all output files
 
     Returns
     -------
@@ -1298,8 +1261,17 @@ def load_from_url(target_url: str):
     )  # TODO - Bubble print statement to logging in general and in Prefect
     r = requests.get(target_url).json()
     if r["value"]:
-        return r["value"]
-    else:
+        # Write as ndjson
+        filename = (
+            f"page_{int(target_url.split('skip=')[-1])//10000}.ndjson"  # TODO: this is built for v3 - v4 datasets inappropriately names the files page_10, page_20, page_30, etc.
+            if "skip" in target_url
+            else "page_0.ndjson"
+        )
+        path = Path(ndjson_folder) / Path(filename)
+        with open(path, "w+") as f:
+            ndjson.dump(r["value"], f)
+        return path
+    else:  # TODO - is this needed? If so, what should happen here?
         return None
         # raise FileNotFoundError
 
@@ -1326,7 +1298,7 @@ def tables_to_parquet(
     source : str, default='cbs
         The source of the dataset.
     pq_dir : Path or str
-        The directory where the putput Parquet files are stored.
+        The directory where the output Parquet files are stored.
 
     Returns
     -------
@@ -1363,12 +1335,17 @@ def tables_to_parquet(
         if key in ("TypedDataSet", "Observations"):
             # if key in ("TypedDataSet"):
             table_shape = main_table_shape
+            metadata_url = "/".join(url.split("/")[:-1]) + "/$metadata"
+            # TODO: add support for v4 (getting 406 error on requests inside get_schema_cbs)
+            if odata_version == "v3":
+                schema = get_schema_cbs(metadata_url, odata_version)
         else:
             table_shape = {
                 "n_records": None,
                 "n_columns": None,
                 "n_observations": None,
             }  # TODO: A better way to default on non-main tables?
+            schema = None
 
         if odata_version == "v3":
             # Generate all table urls
@@ -1380,22 +1357,34 @@ def tables_to_parquet(
                 url, table_shape["n_observations"], odata_version
             )
 
-        # Get table as a dask bag
-        table = get_odata(table_urls=table_urls)
+        # create directories to store files
+        pq_dir = Path(pq_dir)
+        ndjson_dir = pq_dir.parent / Path(f"ndjson/{table_name}")
+        create_dir(pq_dir)
+        create_dir(ndjson_dir)
+
+        # Fetch all urls and dump each as ndjson
+        ndjsons_paths = (
+            db.from_sequence(table_urls)
+            .map(url_to_ndjson, ndjson_folder=ndjson_dir)
+            .compute()
+        )
 
         # Convert to parquet
         print(
-            f"Starting convert_table_to_parquet for table {table_name}"
+            f"Starting convert_ndjson_to_parquet for table {table_name}"
         )  # TODO Convert to logging, add pq_dir to INFO
-        pq_path = convert_table_to_parquet(
-            bag=table,
+        pq_path = convert_ndjsons_to_parquet(
+            files=ndjsons_paths,
+            # urls=table_urls,
+            # bag=table,
             file_name=table_name,
             out_dir=pq_dir,
-            odata_version=odata_version,
+            schema=schema
+            # odata_version=odata_version,
         )
         print()
-        print(f"Finished convert_table_to_parquet for table {table_name}")
-        # Check if convert_table_to_parquet returned None (when link in CBS returns empty table, i.e. CategoryGroups in "84799NED" - seems only relevant for v3)
+        print(f"Finished convert_ndjson_to_parquet for table {table_name}")
         # Add path of file to set
         if pq_path:
             files_parquet.add(pq_path)
@@ -1606,9 +1595,9 @@ def gcs_to_gbq(
     description = None
     if meta_gcp:
         if odata_version == "v3":
-            description = get_from_meta(meta_gcp, key="ShortDescription")
+            description = meta_gcp.get("ShortDescription")
         elif odata_version == "v4":
-            description = get_from_meta(meta_gcp, key="Description")
+            description = meta_gcp.get("Description")
         else:
             raise ValueError("odata version must be either 'v3' or 'v4'")
 
@@ -1702,12 +1691,12 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    main("83583NED", config=config, gcp_env="prod", force=True)
+    # main("83583NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
-    # main("83765NED", config=config, gcp_env="dev", force=True)
-    # Test IV3 dataset, odata_version is v3
+    main("83765NED", config=config, gcp_env="dev", force=True)
+    # Test external dataset, odata_version is v3
     # main(
-    #     "40060NED",
+    #     "40061NED",
     #     source="mlz",
     #     third_party=True,
     #     config=config,

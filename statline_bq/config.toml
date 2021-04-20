@@ -12,7 +12,7 @@
 
         [gcp.prod.dwh]
         project_id = "dataverbinders-open-dwh"
-        bucket = "dataverbinders-open-dwh"  # No bucket exists - not needed currently.
+        bucket = "dataverbinders-open-dwh"
         location = "EU"
 
     [gcp.test]
@@ -39,3 +39,6 @@ iv3 = "iv3"
 mkb = "mkb"
 jm = "jm"
 interreg = "interreg"
+agb = "agb"
+vektis_open_data = "vektis_open_data"
+bag = "bag"
