@@ -1271,9 +1271,8 @@ def url_to_ndjson(target_url: str, ndjson_folder: Union[Path, str]):
         with open(path, "w+") as f:
             ndjson.dump(r["value"], f)
         return path
-    else:  # TODO - is this needed? If so, what should happen here?
+    else:
         return None
-        # raise FileNotFoundError
 
 
 def tables_to_parquet(
@@ -1370,21 +1369,23 @@ def tables_to_parquet(
             .compute()
         )
 
-        # Convert to parquet
-        print(
-            f"Starting convert_ndjson_to_parquet for table {table_name}"
-        )  # TODO Convert to logging, add pq_dir to INFO
-        pq_path = convert_ndjsons_to_parquet(
-            files=ndjsons_paths,
-            # urls=table_urls,
-            # bag=table,
-            file_name=table_name,
-            out_dir=pq_dir,
-            schema=schema
-            # odata_version=odata_version,
-        )
-        print()
-        print(f"Finished convert_ndjson_to_parquet for table {table_name}")
+        # Some urls (i.e. 84799NED_CategoryGroups) are actually empty. These will be computed to None, and skipped here
+        if any(ndjsons_paths):
+            # Convert to parquet
+            print(
+                f"Starting convert_ndjson_to_parquet for table {table_name}"
+            )  # TODO Convert to logging, add pq_dir to INFO
+            pq_path = convert_ndjsons_to_parquet(
+                files=ndjsons_paths,
+                # urls=table_urls,
+                # bag=table,
+                file_name=table_name,
+                out_dir=pq_dir,
+                schema=schema
+                # odata_version=odata_version,
+            )
+            print()
+            print(f"Finished convert_ndjson_to_parquet for table {table_name}")
         # Add path of file to set
         if pq_path:
             files_parquet.add(pq_path)
@@ -1693,7 +1694,9 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    local_folder = main("83583NED", config=config, gcp_env="dev", force=True)
+    # local_folder = main("83583NED", config=config, gcp_env="dev", force=True)
+    # Test cbs core dataset, odata_version is v3, contaiing empty url (CategoryGroups)
+    local_folder = main("84799NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
     # main("83765NED", config=config, gcp_env="dev", force=True)
     # Test external dataset, odata_version is v3
