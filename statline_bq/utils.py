@@ -9,11 +9,10 @@ from tempfile import gettempdir
 import xml.etree.ElementTree as ET
 
 import ndjson
-from dask.bag import Bag as DaskBag
 import dask.bag as db
+import pyarrow as pa
 from pyarrow import json as pa_json
 import pyarrow.parquet as pq
-import pyarrow as pa
 from google.cloud import storage
 from google.cloud import bigquery
 from google.api_core import exceptions
