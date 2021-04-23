@@ -417,103 +417,103 @@ def create_dir(path: Path) -> Path:
         return None
 
 
-def get_dataset_description(urls: dict, odata_version: str) -> str:
-    """Gets a CBS dataset description text.
-    
-    Wrapper function to call the correct version function which in turn gets
-    the dataset description according to the odata version: "v3" or "v4".
+# def get_dataset_description(urls: dict, odata_version: str) -> str:
+#     """Gets a CBS dataset description text.
 
-    Parameters
-    ----------
-    urls: dict
-        Dictionary holding urls of the dataset from CBS.
-        NOTE: urls["Properties"] (for v4) or urls["TableInfos"] (for v3)
-        must be present in order to access the dataset description.
+#     Wrapper function to call the correct version function which in turn gets
+#     the dataset description according to the odata version: "v3" or "v4".
 
-    odata_version: str
-        version of the odata for this dataset - must be either "v3" or "v4".
+#     Parameters
+#     ----------
+#     urls: dict
+#         Dictionary holding urls of the dataset from CBS.
+#         NOTE: urls["Properties"] (for v4) or urls["TableInfos"] (for v3)
+#         must be present in order to access the dataset description.
 
-    Returns
-    -------
-    description: str
-        The description of the dataset from CBS.
+#     odata_version: str
+#         version of the odata for this dataset - must be either "v3" or "v4".
 
-    Raises
-    ------
-    ValueError
-        If odata_version is not "v3" or "v4"
+#     Returns
+#     -------
+#     description: str
+#         The description of the dataset from CBS.
 
-    Examples
-    --------
-    >>> from statline_bq.utils import get_dataset_description
-    >>> urls = {
-    ...         "TableInfos": "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos",  
-    ...         "UntypedDataSet": "https://opendata.cbs.nl/ODataFeed/odata/83583NED/UntypedDataSet"
-    ...         }
-    >>> odata_version = "v3"
-    >>> description_text = get_dataset_description(urls, odata_version=odata_version)
-    >>> description_text
-    #Text describing the dataset will print
-    """
+#     Raises
+#     ------
+#     ValueError
+#         If odata_version is not "v3" or "v4"
 
-    if odata_version.lower() == "v4":
-        description = get_dataset_description_v4(urls["Properties"])
-    elif odata_version.lower() == "v3":
-        description = get_dataset_description_v3(urls["TableInfos"])
-    else:
-        raise ValueError("odata version must be either 'v3' or 'v4'")
-    return description
+#     Examples
+#     --------
+#     >>> from statline_bq.utils import get_dataset_description
+#     >>> urls = {
+#     ...         "TableInfos": "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos",
+#     ...         "UntypedDataSet": "https://opendata.cbs.nl/ODataFeed/odata/83583NED/UntypedDataSet"
+#     ...         }
+#     >>> odata_version = "v3"
+#     >>> description_text = get_dataset_description(urls, odata_version=odata_version)
+#     >>> description_text
+#     #Text describing the dataset will print
+#     """
 
-
-def get_dataset_description_v3(url_table_infos: str) -> str:
-    """Gets the description of a v3 odata dataset from CBS provided in url_table_infos.
-
-    Usually wrapped in `get_dataset_description()`, and it is better practice
-    to call it wrapped to allow for both "v3" and "v4" functionality.
-
-    Parameters
-    ----------
-    url_table_infos: str
-        The url for a dataset's "TableInfos" table as string.
-
-    Returns
-    -------
-    description: str
-        A string with the dataset's description
-    """
-
-    # Get JSON format of data set.
-    url_table_infos = "?".join((url_table_infos, "$format=json"))
-
-    data_info = requests.get(url_table_infos).json()  # Is of type dict()
-
-    data_info_values = data_info["value"]  # Is of type list
-
-    # Get short description as text
-    description = data_info_values[0]["ShortDescription"]
-
-    return description
+#     if odata_version.lower() == "v4":
+#         description = get_dataset_description_v4(urls["Properties"])
+#     elif odata_version.lower() == "v3":
+#         description = get_dataset_description_v3(urls["TableInfos"])
+#     else:
+#         raise ValueError("odata version must be either 'v3' or 'v4'")
+#     return description
 
 
-def get_dataset_description_v4(url_table_properties: str) -> str:
-    """Gets table description of a table in CBS odata V4.
+# def get_dataset_description_v3(url_table_infos: str) -> str:
+#     """Gets the description of a v3 odata dataset from CBS provided in url_table_infos.
 
-    Usually wrapped in `get_dataset_description()`, and it is better practice
-    to call it wrapped to allow for both "v3" and "v4" functionality.
+#     Usually wrapped in `get_dataset_description()`, and it is better practice
+#     to call it wrapped to allow for both "v3" and "v4" functionality.
 
-    Parameters
-    ----------
-    url_table_properties: str
-        The url for a dataset's "Properties" table as string.
+#     Parameters
+#     ----------
+#     url_table_infos: str
+#         The url for a dataset's "TableInfos" table as string.
 
-    Returns
-    -------
-    description: str
-        A string with the dataset's description
-    """
+#     Returns
+#     -------
+#     description: str
+#         A string with the dataset's description
+#     """
 
-    r = requests.get(url_table_properties).json()
-    return r["Description"]
+#     # Get JSON format of data set.
+#     url_table_infos = "?".join((url_table_infos, "$format=json"))
+
+#     data_info = requests.get(url_table_infos).json()  # Is of type dict()
+
+#     data_info_values = data_info["value"]  # Is of type list
+
+#     # Get short description as text
+#     description = data_info_values[0]["ShortDescription"]
+
+#     return description
+
+
+# def get_dataset_description_v4(url_table_properties: str) -> str:
+#     """Gets table description of a table in CBS odata V4.
+
+#     Usually wrapped in `get_dataset_description()`, and it is better practice
+#     to call it wrapped to allow for both "v3" and "v4" functionality.
+
+#     Parameters
+#     ----------
+#     url_table_properties: str
+#         The url for a dataset's "Properties" table as string.
+
+#     Returns
+#     -------
+#     description: str
+#         A string with the dataset's description
+#     """
+
+#     r = requests.get(url_table_properties).json()
+#     return r["Description"]
 
 
 def get_column_descriptions(urls: dict, odata_version: str) -> dict:
@@ -1666,7 +1666,7 @@ def main(
     config: Config = None,
     gcp_env: str = "dev",
     force: bool = False,
-) -> None:
+) -> Path:
     gcp_env = gcp_env.lower()
     if check_gcp_env(gcp_env):
         print(f"Processing dataset {id}")
@@ -1684,8 +1684,11 @@ def main(
         print(
             f"Completed dataset {id}"
         )  # TODO - add response from google if possible (some success/failure flag)
-        pq_file = Path(files_parquet.pop())
-        local_folder = pq_file.parents[2]
+        if files_parquet:
+            pq_file = Path(files_parquet.pop())
+            local_folder = pq_file.parents[2]
+        else:
+            local_folder = None
         return local_folder
 
 
@@ -1695,8 +1698,10 @@ if __name__ == "__main__":
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
     # local_folder = main("83583NED", config=config, gcp_env="dev", force=True)
+    # # Test skippung a dataset, odata_version is v3
+    local_folder = main("83583NED", config=config, gcp_env="dev", force=False)
     # Test cbs core dataset, odata_version is v3, contaiing empty url (CategoryGroups)
-    local_folder = main("84799NED", config=config, gcp_env="dev", force=True)
+    # local_folder = main("84799NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
     # main("83765NED", config=config, gcp_env="dev", force=True)
     # Test external dataset, odata_version is v3
