@@ -84,3 +84,6 @@ notebooks/
 
 # dask
 dask-worker-space/
+
+# logging
+logs/
