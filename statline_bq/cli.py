@@ -3,7 +3,7 @@ from pathlib import Path
 from tomlkit.exceptions import NonExistentKey
 import click
 
-from statline_bq.utils import main
+from statline_bq.utils import set_gcp, main
 from statline_bq.config import get_config, get_datasets
 
 
@@ -11,6 +11,14 @@ from statline_bq.config import get_config, get_datasets
 @click.option(
     "--dataset-id",
     help="A valid CBS dataset id to be processed. If not provided, the ids will be taken from 'datasets.toml'",
+)
+@click.option(
+    "--source", help="The source of the dataset. Defaults to `cbs`", default="cbs"
+)
+@click.option(
+    "--third-party/--no-third-party",
+    default=False,
+    help="Flag to indicate dataset is not originally from CBS. Set to true to use dataderden.cbs.nl as base url (not available in v4 yet).",
 )
 @click.option(
     "--gcp-env",
@@ -23,7 +31,9 @@ from statline_bq.config import get_config, get_datasets
     default=False,
     help="A flag that forces dataset processing even if the dataset's 'last_modified' metadata field is the same as the same dataset's metadata previously processesed.",
 )
-def upload_datasets(dataset_id: str, gcp_env: str, force: bool):
+def upload_datasets(
+    dataset_id: str, source: str, third_party: bool, gcp_env: str, force: bool
+):
     """
     This CLI uploads datasets from CBS to Google Cloud Platform.
 
@@ -55,12 +65,13 @@ def upload_datasets(dataset_id: str, gcp_env: str, force: bool):
             )
             return
     gcp_env = gcp_env.lower()
-    config_envs = {
-        "dev": config.gcp.dev,
-        "test": config.gcp.test,
-        "prod": config.gcp.prod,
-    }
-    gcp_project = config_envs.get(gcp_env)
+    # config_envs = {
+    #     "dev": config.gcp.dev,
+    #     "test": config.gcp.test,
+    #     "prod": config.gcp.prod,
+    # }
+    # gcp_project = config_envs.get(gcp_env)
+    gcp_project = set_gcp(config, gcp_env, source)
     click.echo("The following datasets will be downloaded from CBS and uploaded into:")
     click.echo("")
     click.echo(f"Project: {gcp_project.project_id}")
@@ -70,5 +81,12 @@ def upload_datasets(dataset_id: str, gcp_env: str, force: bool):
         click.echo(f"{i+1}. {dataset}")
     click.echo("")
     for id in datasets:
-        main(id=id, config=config, gcp_env=gcp_env, force=force)
+        main(
+            id=id,
+            source=source,
+            third_party=third_party,
+            config=config,
+            gcp_env=gcp_env,
+            force=force,
+        )
     click.echo("Finished processing datasets.")
