@@ -868,7 +868,7 @@ def cbsodata_to_gbq(
         to use dataderden.cbs.nl as base url (not available in v4 yet).
 
     source: str, default="cbs"
-        The source of the dataset. Currently only "cbs" is relevant.
+        The source of the dataset.
 
     config: Config object
         Config object holding GCP and local paths
@@ -1668,6 +1668,10 @@ def main(
     force: bool = False,
 ) -> Path:
     gcp_env = gcp_env.lower()
+    if third_party and source == "cbs":
+        raise ValueError(
+            "A third-party dataset cannot have 'cbs' as source: please provide correct 'source' parameter"
+        )
     if check_gcp_env(gcp_env):
         print(f"Processing dataset {id}")
         # print("TEST CHANGES")
