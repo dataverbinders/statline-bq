@@ -65,12 +65,6 @@ def upload_datasets(
             )
             return
     gcp_env = gcp_env.lower()
-    # config_envs = {
-    #     "dev": config.gcp.dev,
-    #     "test": config.gcp.test,
-    #     "prod": config.gcp.prod,
-    # }
-    # gcp_project = config_envs.get(gcp_env)
     gcp_project = set_gcp(config, gcp_env, source)
     click.echo("The following datasets will be downloaded from CBS and uploaded into:")
     click.echo("")
