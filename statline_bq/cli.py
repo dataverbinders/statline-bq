@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from tomlkit.exceptions import NonExistentKey
 import click
 
 from statline_bq.utils import set_gcp, main
@@ -51,19 +50,18 @@ def upload_datasets(
     For further information, see the documentaion "????"
     """  # TODO: provide link to documnetation
 
-    config_path = Path("./config.toml")
-    datasets_path = Path("./datasets.toml")
+    config_path = Path(__file__).parent / "./config.toml"
+    datasets_path = Path(__file__).parent / "./datasets.toml"
     config = get_config(config_path)
     if dataset_id:
         datasets = [dataset_id]
     else:
-        try:
-            datasets = get_datasets(datasets_path)
-        except NonExistentKey:
+        datasets = get_datasets(datasets_path)
+        if not datasets:
             click.echo(
                 "No dataset ids were provided. Please enter a dataset id, either using either the '--dataset_id` parameter or by editing `datasets.toml`"
             )
-            return
+            return None
     gcp_env = gcp_env.lower()
     gcp_project = set_gcp(config, gcp_env, source)
     click.echo("The following datasets will be downloaded from CBS and uploaded into:")
