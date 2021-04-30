@@ -20,8 +20,7 @@ from google.cloud import storage
 from google.cloud import bigquery
 from google.api_core import exceptions
 from google.oauth2.credentials import Credentials
-
-from statline_bq.config import Config, Gcp, GcpProject
+from box import Box
 
 LOGGING_CONF_FILE = Path(__file__).parent / "logging_conf.toml"
 logging.config.dictConfig(toml.load(LOGGING_CONF_FILE))
@@ -246,7 +245,7 @@ def get_schema_cbs(metadata_url, odata_version) -> pa.Schema:
 
 
 def get_latest_folder(
-    gcs_folder: str, gcp: GcpProject, credentials: Credentials = None
+    gcs_folder: str, gcp: Box, credentials: Credentials = None
 ) -> Union[str, None]:
     """Returns the latest subfolder from a "folder" in GCP[^folders].
     
@@ -265,8 +264,8 @@ def get_latest_folder(
     ----------
     gcs_folder : str
         The top level folder to traverse
-    gcp : GcpProject
-        A GcpProject class object holding GCP Project parameters (project id, bucket)
+    gcp : Box
+        A Box object holding GCP Project parameters (project id, bucket)
 
     Returns
     -------
@@ -292,11 +291,7 @@ def get_latest_folder(
 
 
 def get_metadata_gcp(
-    id: str,
-    source: str,
-    odata_version: str,
-    gcp: GcpProject,
-    credentials: Credentials = None,
+    id: str, source: str, odata_version: str, gcp: Box, credentials: Credentials = None,
 ) -> Union[dict, None]:
     """Gets a dataset's metadata from GCP.
 
@@ -315,8 +310,8 @@ def get_metadata_gcp(
         The source of the dataset. Currently only "cbs" is relevant.
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
-    gcp : GcpProject
-        A GcpProject class object holding GCP Project parameters (project id, bucket)
+    gcp : Box
+        A Box object holding GCP Project parameters (project id, bucket)
 
     Returns
     -------
@@ -609,13 +604,13 @@ def convert_ndjsons_to_parquet(
     return pq_file
 
 
-def set_gcp(config: Config, gcp_env: str, source: str) -> GcpProject:
+def set_gcp(config: Box, gcp_env: str, source: str) -> Box:
     """Sets the desired GCP donciguration
 
     Parameters
     ----------
-    config : Config
-        `statline_bq.config.Config` object
+    config : Box
+        configuration object
     gcp_env : str
         String representing the desired environment between ['dev', 'test', 'prod']
     source : str
@@ -623,8 +618,8 @@ def set_gcp(config: Config, gcp_env: str, source: str) -> GcpProject:
 
     Returns
     -------
-    GcpProject
-        A GcpProject class object holding GCP Project parameters (project id, bucket)
+    Box
+        A Box object holding GCP Project parameters (project id, bucket)
     """
     gcp_env = gcp_env.lower()
     source = source.lower() if source.lower() == "cbs" else "external"
@@ -646,7 +641,7 @@ def upload_to_gcs(
     source: str = "cbs",
     odata_version: str = None,
     id: str = None,
-    gcp: GcpProject = None,
+    gcp: Box = None,
     credentials: Credentials = None,
 ) -> str:  # TODO change the return value to some indication or id from Google?:
     """Uploads all files in a given directory to Google Cloud Storage.
@@ -673,7 +668,7 @@ def upload_to_gcs(
         version of the odata for this dataset - must be either "v3" or "v4".
     id: str
         CBS Dataset id, i.e. "83583NED"
-    config: Config
+    config: Box
         Config object holding GCP and local paths
     gcp_env: str
         determines which GCP configuration to use from config.gcp
@@ -739,7 +734,7 @@ def get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
 def bq_update_main_table_col_descriptions(
     dataset_ref: str,
     descriptions: dict,
-    gcp: GcpProject = None,
+    gcp: Box = None,
     credentials: Credentials = None,
 ) -> bigquery.Table:
     """Updates column descriptions of main table for existing BQ dataset
@@ -750,8 +745,8 @@ def bq_update_main_table_col_descriptions(
         dataset reference where main table exists
     descriptions : dict
         dictionary holding column descriptions
-    gcp : Gcp,
-        Gcp object holding GCP configurations
+    gcp : Box,
+        Box object holding GCP configurations
     gcp_env : str, default = "dev"
         determines which GCP configuration to use from gcp
 
@@ -805,7 +800,7 @@ def get_col_descs_from_gcs(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
-    gcp: GcpProject = None,
+    gcp: Box = None,
     gcs_folder: str = None,
     credentials: Credentials = None,
 ) -> dict:
@@ -827,8 +822,8 @@ def get_col_descs_from_gcs(
         The source of the dataset. Currently only "cbs" is relevant.
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
-    gcp: Gcp
-        A Gcp Class object, holding GCP parameters
+    gcp: Box
+        A Box object, holding GCP parameters
     gcs_folder : str
         The GCS folder holding the coloumn descriptions json file
 
@@ -853,7 +848,7 @@ def cbsodata_to_gbq(
     odata_version: str,
     third_party: str = False,
     source: str = "cbs",
-    config: Config = None,
+    config: Box = None,
     gcp_env: str = None,
     force: bool = False,
     credentials: Credentials = None,
@@ -880,7 +875,7 @@ def cbsodata_to_gbq(
     source: str, default="cbs"
         The source of the dataset.
 
-    config: Config object
+    config: Box
         Config object holding GCP and local paths
 
     gcp_env: str
@@ -1146,7 +1141,7 @@ def get_urls(
 
 
 def create_named_dir(
-    id: str, odata_version: str, source: str = "cbs", config: Config = None
+    id: str, odata_version: str, source: str = "cbs", config: Box = None
 ) -> Path:
     """Creates a directory according to a specific structure.
 
@@ -1167,7 +1162,7 @@ def create_named_dir(
         version of the odata for this dataset - must be either "v3" or "v4".
     source: str, default="cbs"
         The source of the dataset. Currently only "cbs" is relevant.
-    config: Config object
+    config: Box
         Config object holding GCP and local paths
 
     Returns
@@ -1406,7 +1401,7 @@ def create_bq_dataset(
     source: str = "cbs",
     odata_version: str = None,
     description: str = None,
-    gcp: Gcp = None,
+    gcp: Box = None,
     credentials: Credentials = None,
 ) -> str:
     """Creates a dataset in Google Big Query. If dataset exists already exists, does nothing.
@@ -1421,8 +1416,8 @@ def create_bq_dataset(
         version of the odata for this dataset - must be either "v3" or "v4".
     description: str
         The description of the dataset
-    gcp: Gcp
-        A Gcp Class object, holding GCP parameters
+    gcp: Box
+        A Box object, holding GCP parameters
     credentials : google.oauth2.credentials.Credentials
         A GCP Credentials object to identify as a service account
 
@@ -1464,7 +1459,7 @@ def check_bq_dataset(
     id: str,
     source: str,
     odata_version: str,
-    gcp: Gcp = None,
+    gcp: Box = None,
     credentials: Credentials = None,
 ) -> bool:
     """Check if dataset exists in BQ.
@@ -1476,8 +1471,8 @@ def check_bq_dataset(
         The source of the datset
     odata_version : str
         "v3" or "v4" indicating the version
-    gcp : Gcp
-        A Gcp object holding GCP parameters (i.e. project and bucket)
+    gcp : Box
+        A Box object holding GCP parameters (i.e. project and bucket)
     credentials : google.oauth2.credentials.Credentials
         A GCP Credentials object to identify as a service account
 
@@ -1501,7 +1496,7 @@ def delete_bq_dataset(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
-    gcp: Gcp = None,
+    gcp: Box = None,
     credentials: Credentials = None,
 ) -> None:
     """Delete an exisiting dataset from Google Big Query
@@ -1514,8 +1509,8 @@ def delete_bq_dataset(
         The source of the dataset. Currently only "cbs" is relevant.
     odata_version: str
         version of the odata for this dataset - must be either "v3" or "v4".
-    gcp: Gcp
-        A Gcp Class object, holding GCP parameters
+    gcp: Box
+        A Box Class object, holding GCP parameters
     credentials : google.oauth2.credentials.Credentials
         A GCP Credentials object to identify as a service account
 
@@ -1542,7 +1537,7 @@ def gcs_to_gbq(
     odata_version: str = None,
     gcs_folder: str = None,
     file_names: list = None,
-    gcp: GcpProject = None,
+    gcp: Box = None,
     credentials: Credentials = None,
 ) -> None:  # TODO Return job id
     """Creates a BQ dataset and links all relevant tables from GCS underneath.
@@ -1561,7 +1556,7 @@ def gcs_to_gbq(
         version of the odata for this dataset - must be either "v3" or "v4".
     third_party : bool, default=False
         Flag to indicate dataset is not originally from CBS. Set to true to use dataderden.cbs.nl as base url (not available in v4 yet).
-    config : Config object
+    config : Box
         Config object holding GCP and local paths.
     gcs_folder : str
         The GCS folder holding the description txt file.
@@ -1673,7 +1668,7 @@ def main(
     id: str,
     source: str = "cbs",
     third_party: bool = False,
-    config: Config = None,
+    config: Box = None,
     gcp_env: str = "dev",
     force: bool = False,
 ) -> Path:
@@ -1712,9 +1707,9 @@ if __name__ == "__main__":
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
     local_folder = main("83583NED", config=config, gcp_env="dev", force=True)
-    # # Test skippung a dataset, odata_version is v3
+    # # Test skipping a dataset, odata_version is v3
     # local_folder = main("83583NED", config=config, gcp_env="dev", force=False)
-    # Test cbs core dataset, odata_version is v3, containing empty url (CategoryGroups)
+    # Test cbs core dataset, odata_version is v3, contaiing empty url (CategoryGroups)
     # local_folder = main("84799NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
     # main("83765NED", config=config, gcp_env="dev", force=True)
