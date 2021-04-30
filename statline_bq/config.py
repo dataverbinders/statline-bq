@@ -46,9 +46,12 @@ def get_datasets(datasets_file: Union[Path, str]) -> tuple:
     """
     datasets_file = Path(datasets_file)
     datasets = toml.load(datasets_file)
-    return tuple(
-        datasets.get("datasets").get("ids")
-    )  # TODO: make it more robust to changes in the file? i.e. if 'ids' was changed to something else?
+    if datasets:
+        return tuple(
+            datasets.get("ids")
+        )  # TODO: make it more robust to changes in the file? i.e. if 'ids' was changed to something else?
+    else:
+        return None
 
 
 if __name__ == "__main__":
