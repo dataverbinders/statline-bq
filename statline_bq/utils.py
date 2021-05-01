@@ -1014,6 +1014,18 @@ def cbsodata_to_gbq(
         source=source,
         pq_dir=pq_dir,
     )
+    # DataProperties table contains "." in field names which is not allowed in linked BQ tables
+    data_properties_pq = next(
+        (x for x in files_parquet if "DataProperties" in str(x)), None
+    )
+    if data_properties_pq:
+        data_properties_table = pq.read_table(data_properties_pq)
+        new_column_names = [
+            name.replace(".", "_") for name in data_properties_table.column_names
+        ]
+        data_properties_table = data_properties_table.rename_columns(new_column_names)
+        pq.write_table(data_properties_table, data_properties_pq)
+
     # Get columns' descriptions from CBS
     col_descriptions = get_column_descriptions(urls, odata_version=odata_version)
     # Write column descriptions to json file and store in dataset directory with parquet tables
@@ -1706,17 +1718,17 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # # Test cbs core dataset, odata_version is v3
-    local_folder = main("83583NED", config=config, gcp_env="dev", force=True)
+    # local_folder = main("83583NED", config=config, gcp_env="dev", force=True)
     # # Test skipping a dataset, odata_version is v3
     # local_folder = main("83583NED", config=config, gcp_env="dev", force=False)
     # Test cbs core dataset, odata_version is v3, contaiing empty url (CategoryGroups)
     # local_folder = main("84799NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
-    # main("83765NED", config=config, gcp_env="dev", force=True)
+    main("83765NED", config=config, gcp_env="dev", force=True)
     # Test external dataset, odata_version is v3
     # main(
-    #     "40061NED",
-    #     source="mlz",
+    #     "45012NED",
+    #     source="iv3",
     #     third_party=True,
     #     config=config,
     #     gcp_env="dev",
