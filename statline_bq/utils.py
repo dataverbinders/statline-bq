@@ -1716,58 +1716,36 @@ def main(
 def fix_data_properties(
     id: str,
     source: str = "cbs",
-    third_party: bool = False,
+    # third_party: bool = False,
     config: Box = None,
     gcp_env: str = "dev",
 ):
     gcp = set_gcp(config=config, gcp_env=gcp_env, source=source)
-    odata_version = check_v4(id=id, third_party=third_party)
-    urls = get_urls(id=id, odata_version=odata_version, third_party=third_party)
+    odata_version = "v3"  # only relevant for v3
     pq_dir = create_named_dir(
         id=id, odata_version=odata_version, source=source, config=config
     )
-    url = urls.get("DataProperties")
-    if url:
-        file_name = f"{source}.{odata_version}.{id}_DataProperties"
-        ndjson_dir = pq_dir.parent / "ndjson"
-        create_dir(ndjson_dir)
-        ndjson_path = ndjson_dir / (file_name + ".ndjson")
-        pq_path = pq_dir / (file_name + ".parquet")
-        if odata_version == "v3":
-            url = "?".join((url, "$format=json"))
-        r = requests.get(url).json()
-        with open(ndjson_path, "w+") as f:
-            ndjson.dump(r["value"], f)
-        data_properties_table = pa_json.read_json(ndjson_path)
-        new_column_names = [
-            name.replace(".", "_") for name in data_properties_table.column_names
-        ]
-        data_properties_table = data_properties_table.rename_columns(new_column_names)
-        pq.write_table(data_properties_table, pq_path)
-        # Upload to storage
-        latest_folder = get_latest_folder(
-            gcs_folder=f"{source}/{odata_version}/{id}", gcp=gcp
-        )
-        storage_client = storage.Client(project=gcp.project_id)
-        bucket = storage_client.get_bucket(gcp.bucket)
-        gcs_blob = bucket.blob(latest_folder + "/" + file_name + ".parquet")
-        gcs_blob.upload_from_filename(pq_path)
-        # Link to BQ
-        bq_client = bigquery.Client(project=gcp.project_id)
-        dataset_id = f"{source}_{odata_version}_{id}"
-        dataset_ref = bigquery.DatasetReference(gcp.project_id, dataset_id)
-        table_id = file_name.split(".")[2]
-        table = bigquery.Table(dataset_ref.table(table_id))
-        bq_client.delete_table(table)
-        external_config = bigquery.ExternalConfig("PARQUET")
-        external_config.source_uris = [
-            f"https://storage.cloud.google.com/{gcp.bucket}/{latest_folder}/{file_name}.parquet"
-        ]
-        table.external_data_configuration = external_config
-        bq_client.create_table(table)
-        return pq_dir.parents[3]
-    else:
-        return
+    file_name = f"{source}.{odata_version}.{id}_DataProperties.parquet"
+    after_path = pq_dir / file_name
+    before_path = (
+        pq_dir / f"{source}.{odata_version}.{id}_DataProperties_BEFORE.parquet"
+    )
+    storage_client = storage.Client(project=gcp.project_id)
+    latest_folder = get_latest_folder(
+        gcs_folder=f"{source}/{odata_version}/{id}", gcp=gcp
+    )
+    bucket = storage_client.get_bucket(gcp.bucket)
+    download_blob = bucket.get_blob(latest_folder + "/" + file_name)
+    upload_blob = bucket.get_blob(latest_folder + "/" + file_name)
+    download_blob.download_to_filename(before_path)
+    table = pq.read_table(before_path)
+    new_column_names = [name.replace(".", "_") for name in table.column_names]
+    table = table.rename_columns(new_column_names)
+    pq.write_table(table, after_path)
+    upload_blob.upload_from_filename(after_path)
+    before_path.unlink(missing_ok=True)
+    after_path.unlink(missing_ok=True)
+    return new_column_names
 
 
 if __name__ == "__main__":
@@ -1792,7 +1770,20 @@ if __name__ == "__main__":
     #     force=True,
     # )
     # print(local_folder)
-    fix_data_properties(
-        id="45001NED", source="iv3", third_party=True, config=config, gcp_env="prod"
-    )
-
+    for id in [
+        "45001NED",
+        # "45004NED",
+        # "45005NED",
+        # "45006NED",
+        # "45007NED",
+        # "45008NED",
+        # "45031NED",
+        # "45038NED",
+        # "45042NED",
+        # "45046NED",
+        # "45050NED",
+    ]:
+        new_column_names = fix_data_properties(
+            id=id, source="iv3", config=config, gcp_env="prod"
+        )
+        print(new_column_names)
