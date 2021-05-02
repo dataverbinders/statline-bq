@@ -1614,6 +1614,36 @@ def main(
         return local_folder
 
 
+def clean_python_name(s: str, extra_chars: str = ""):
+    """Method to convert string to clean string for use
+    in dataframe column names so that it complies to python 2.x object name standard:
+           (letter|'_')(letter|digit|'_')
+    Based on
+    https://stackoverflow.com/questions/3303312/how-do-i-convert-a-string-to-a-valid-variable-name-in-python
+
+    Parameters
+    ----------
+    s : str
+        string to clean
+    extra_chars : str, optional
+        additional characrters to be replaced by an underscore
+
+    Returns
+    -------
+    s: str
+        clean string
+    """
+    import re
+
+    # Remove leading characters until we find a letter or underscore, and remove trailing spaces
+    s = re.sub("^[^a-zA-Z_]+", "", s.strip())
+
+    # Replace invalid characters with underscores
+    s = re.sub("[^0-9a-zA-Z_]" + extra_chars, "_", s)
+
+    return s
+
+
 def fix_data_properties(
     id: str,
     source: str = "cbs",
@@ -1640,7 +1670,7 @@ def fix_data_properties(
     upload_blob = bucket.get_blob(latest_folder + "/" + file_name)
     download_blob.download_to_filename(before_path)
     table = pq.read_table(before_path)
-    new_column_names = [name.replace(".", "_") for name in table.column_names]
+    new_column_names = [clean_python_name(name, ".") for name in table.column_names]
     table = table.rename_columns(new_column_names)
     pq.write_table(table, after_path)
     upload_blob.upload_from_filename(after_path)
