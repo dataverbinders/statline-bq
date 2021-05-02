@@ -422,105 +422,6 @@ def create_dir(path: Path) -> Path:
         return None
 
 
-# def get_dataset_description(urls: dict, odata_version: str) -> str:
-#     """Gets a CBS dataset description text.
-
-#     Wrapper function to call the correct version function which in turn gets
-#     the dataset description according to the odata version: "v3" or "v4".
-
-#     Parameters
-#     ----------
-#     urls: dict
-#         Dictionary holding urls of the dataset from CBS.
-#         NOTE: urls["Properties"] (for v4) or urls["TableInfos"] (for v3)
-#         must be present in order to access the dataset description.
-
-#     odata_version: str
-#         version of the odata for this dataset - must be either "v3" or "v4".
-
-#     Returns
-#     -------
-#     description: str
-#         The description of the dataset from CBS.
-
-#     Raises
-#     ------
-#     ValueError
-#         If odata_version is not "v3" or "v4"
-
-#     Examples
-#     --------
-#     >>> from statline_bq.utils import get_dataset_description
-#     >>> urls = {
-#     ...         "TableInfos": "https://opendata.cbs.nl/ODataFeed/odata/83583NED/TableInfos",
-#     ...         "UntypedDataSet": "https://opendata.cbs.nl/ODataFeed/odata/83583NED/UntypedDataSet"
-#     ...         }
-#     >>> odata_version = "v3"
-#     >>> description_text = get_dataset_description(urls, odata_version=odata_version)
-#     >>> description_text
-#     #Text describing the dataset will print
-#     """
-
-#     if odata_version.lower() == "v4":
-#         description = get_dataset_description_v4(urls["Properties"])
-#     elif odata_version.lower() == "v3":
-#         description = get_dataset_description_v3(urls["TableInfos"])
-#     else:
-#         raise ValueError("odata version must be either 'v3' or 'v4'")
-#     return description
-
-
-# def get_dataset_description_v3(url_table_infos: str) -> str:
-#     """Gets the description of a v3 odata dataset from CBS provided in url_table_infos.
-
-#     Usually wrapped in `get_dataset_description()`, and it is better practice
-#     to call it wrapped to allow for both "v3" and "v4" functionality.
-
-#     Parameters
-#     ----------
-#     url_table_infos: str
-#         The url for a dataset's "TableInfos" table as string.
-
-#     Returns
-#     -------
-#     description: str
-#         A string with the dataset's description
-#     """
-
-#     # Get JSON format of data set.
-#     url_table_infos = "?".join((url_table_infos, "$format=json"))
-
-#     data_info = requests.get(url_table_infos).json()  # Is of type dict()
-
-#     data_info_values = data_info["value"]  # Is of type list
-
-#     # Get short description as text
-#     description = data_info_values[0]["ShortDescription"]
-
-#     return description
-
-
-# def get_dataset_description_v4(url_table_properties: str) -> str:
-#     """Gets table description of a table in CBS odata V4.
-
-#     Usually wrapped in `get_dataset_description()`, and it is better practice
-#     to call it wrapped to allow for both "v3" and "v4" functionality.
-
-#     Parameters
-#     ----------
-#     url_table_properties: str
-#         The url for a dataset's "Properties" table as string.
-
-#     Returns
-#     -------
-#     description: str
-#         A string with the dataset's description
-#     """
-
-#     r = requests.get(url_table_properties).json()
-#     return r["Description"]
-
-
 def get_column_descriptions(urls: dict, odata_version: str) -> dict:
     """Gets the column descriptions from CBS.
 
@@ -1771,19 +1672,20 @@ if __name__ == "__main__":
     # )
     # print(local_folder)
     for id in [
-        "45001NED",
-        # "45004NED",
-        # "45005NED",
-        # "45006NED",
-        # "45007NED",
-        # "45008NED",
-        # "45031NED",
-        # "45038NED",
-        # "45042NED",
-        # "45046NED",
-        # "45050NED",
+        "81008ned",
+        "81498ned",
+        "82000NED",
+        "82496NED",
+        "82949NED",
+        "83287NED",
+        "83553NED",
+        "83859NED",
+        "84378NED",
+        "84721NED",
+        "84929NED",
+        "70739ned",
     ]:
         new_column_names = fix_data_properties(
-            id=id, source="iv3", config=config, gcp_env="prod"
+            id=id, source="cbs", config=config, gcp_env="prod"
         )
         print(new_column_names)
