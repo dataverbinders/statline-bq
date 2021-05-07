@@ -334,7 +334,6 @@ def get_metadata_gcp(
         return meta
     except AttributeError:
         # TODO: How to manage warnings in a the log decorator?
-        pass
         # logger.warning(
         #     f"No metadata was found in GCP {gcp.project_id} for {source}_{odata_version}_{id}"
         # )

@@ -1,4 +1,4 @@
-# Logger decorator to log general execution of functions.
+# # Logger decorator to log general execution of functions.
 # Based on https://medium.com/swlh/add-log-decorators-to-your-python-project-84094f832181
 from pathlib import Path
 import sys
@@ -8,8 +8,19 @@ import logging.config
 
 import toml
 
+LOG_DIR = Path.home() / ".statline-bq/logs"
 LOGGING_CONF_FILE = Path(__file__).parent / "logging_conf.toml"
-logging.config.dictConfig(toml.load(LOGGING_CONF_FILE))
+
+log_conf = toml.load(LOGGING_CONF_FILE)
+for handler, handler_conf in log_conf.get("handlers").items():
+    if "File" in handler_conf.get("class"):
+        filepath = LOG_DIR / handler_conf.get("filename")
+        handler_conf["filename"] = str(filepath)
+
+if not (LOG_DIR.exists() and LOG_DIR.is_dir()):
+    LOG_DIR.mkdir(parents=True)
+
+logging.config.dictConfig(log_conf)
 
 
 def logdec(func):
