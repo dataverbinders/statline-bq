@@ -7,9 +7,7 @@ from datetime import datetime
 from shutil import rmtree
 from tempfile import gettempdir
 import xml.etree.ElementTree as ET
-
-# import logging
-# import logging.config
+import logging
 
 import ndjson
 import dask.bag as db
@@ -18,12 +16,13 @@ from pyarrow import json as pa_json
 import pyarrow.parquet as pq
 from google.cloud import storage
 from google.cloud import bigquery
-
-# from google.api_core import exceptions
+from google.api_core import exceptions
 from google.oauth2.credentials import Credentials
 from box import Box
 
 from statline_bq.log import logdec
+
+logger = logging.getLogger(__name__)
 
 
 @logdec
@@ -329,15 +328,9 @@ def get_metadata_gcp(
     gcs_folder = f"{source}/{odata_version}/{id}"
     gcs_folder = get_latest_folder(gcs_folder, gcp)
     blob = bucket.get_blob(f"{gcs_folder}/{source}.{odata_version}.{id}_Metadata.json")
-    try:
-        meta = json.loads(blob.download_as_string())
-        return meta
-    except AttributeError:
-        # TODO: How to manage warnings in a the log decorator?
-        # logger.warning(
-        #     f"No metadata was found in GCP {gcp.project_id} for {source}_{odata_version}_{id}"
-        # )
-        return None
+    # If no such blob exists, the error will be caught by @logdec, and None would be returned instead
+    meta = json.loads(blob.download_as_string())
+    return meta
 
 
 @logdec
@@ -389,6 +382,21 @@ def dict_to_json_file(
 
 @logdec
 def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
+    """Gets the "modified" field from a dict containing a dataset's metadata.
+
+    Parameters
+    ----------
+    gcp_meta : dict
+        A dataset's metadata
+    force : bool, optional
+        [description], by default False
+
+    Returns
+    -------
+    Union[str, None]
+        [description]
+    """
+    # TODO: can we remove `force` from here, as it is handled in skip_dataset? - run unit tests to verify
     if not force:
         try:
             gcp_modified = gcp_meta.get("Modified")
@@ -401,6 +409,24 @@ def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
 
 @logdec
 def skip_dataset(cbs_modified: str, gcp_modified: str, force: bool) -> bool:
+    """Checks whether a dataset should be skipped, given the "last modified" dates from the CBS version and the GCP version.
+
+    Parameters
+    ----------
+    cbs_modified : str
+        "last modifed" string from the CBS metadata
+    gcp_modified : str
+        "last modifed" string from the GCP metadata
+    force : bool
+        flag to signal forcing the processing of a dataset even if the dates match.
+
+    Returns
+    -------
+    bool
+        True if the dates are identical, False if not or if force=True
+    """
+    # Dataset processing is skipped if the last modified data from CBS is the same as that for the GCP one
+    # TODO: should "if (cbs_modified is None.." changed to "if (gcp_modified is None.."?
     if (cbs_modified is None or cbs_modified == gcp_modified) and (not force):
         return True
     else:
@@ -422,15 +448,10 @@ def create_dir(path: Path) -> Path:
         The same input path, to new or existing directory.
     """
 
-    # try:
     path = Path(path)
     if not (path.exists() and path.is_dir()):
         path.mkdir(parents=True)
     return path
-    #
-    # except TypeError as error:
-    #     logger.exception(f"Error trying to find {path}: {error!s}")
-    #     return None
 
 
 @logdec
@@ -512,7 +533,7 @@ def convert_ndjsons_to_parquet(
     with pq.ParquetWriter(pq_file, schema) as writer:
         parse_options = pa_json.ParseOptions(explicit_schema=schema)
         for f in files:
-            # logger.info(f"Processing {f}")
+            logger.debug(f"Processing {f}")
             table = pa_json.read_json(f, parse_options=parse_options)
             writer.write_table(table)
             remove(f)
@@ -690,16 +711,9 @@ def bq_update_main_table_col_descriptions(
         if any(option in table.table_id for option in options):
             main_table_id = table.table_id
             break
-
-    # try:
     # write as standard SQL format
     main_table_id = dataset_ref.dataset_id + "." + main_table_id
     main_table = client.get_table(main_table_id)
-    # except UnboundLocalError as e:
-    # logger.exception(
-    #     f"No table located with 'TypedDataset' in its name for dataset {dataset_ref}: {e}"
-    # )
-    return None
 
     # Create SchemaField for column description
     new_schema = []
@@ -910,14 +924,9 @@ def cbsodata_to_gbq(
     gcp_modified = get_gcp_modified(gcp_meta, force)
     # Skip all process if modified date is the same in GCP and source (and Force is set to False)
     if skip_dataset(cbs_modified, gcp_modified, force):
-        # if (cbs_modified is None or cbs_modified == gcp_modified) and (not force):
-        # TODO: Lost info
-        # logger.info(cbs_modified)
-        # logger.info(
-        #     f"Skipping dataset {id} because the same dataset exists on GCP, with the same 'Modified' date"
-        # )
-        # logger.info(f"Dataset {id} source last modified: {cbs_modified}")
-        # logger.info(f"Dataset {id} gcp last modified: {gcp_modified}")
+        logger.info(
+            f"Skipping dataset {id} because the same dataset exists on GCP, with the same 'Modified' date"
+        )
         return None
 
     # Create directory to store parquest files locally
@@ -1198,10 +1207,7 @@ def url_to_ndjson(target_url: str, ndjson_folder: Union[Path, str]):
         if no values exist in the url
     """
 
-    # TODO: Lost info
-    # logger.info(
-    #     f"load_from_url: url = {target_url}"
-    # )  # TODO - Bubble print statement to logging in general and in Prefect
+    logger.debug(f"load_from_url: url = {target_url}")
     r = requests.get(target_url).json()
     if r["value"]:
         # Write as ndjson
@@ -1316,9 +1322,6 @@ def tables_to_parquet(
         # Some urls (i.e. 84799NED_CategoryGroups) are actually empty. These will be computed to None, and skipped here
         if any(ndjsons_paths):
             # Convert to parquet
-            # logger.info(
-            #     f"Starting convert_ndjson_to_parquet for table {table_name}"
-            # )
             pq_path = convert_ndjsons_to_parquet(
                 files=ndjsons_paths,
                 # urls=table_urls,
@@ -1328,7 +1331,6 @@ def tables_to_parquet(
                 schema=schema
                 # odata_version=odata_version,
             )
-            # logger.info(f"Finished convert_ndjson_to_parquet for table {table_name}")
         # Add path of file to set
         if pq_path:
             files_parquet.add(pq_path)
@@ -1385,15 +1387,12 @@ def create_bq_dataset(
     # Send the dataset to the API for creation, with an explicit timeout.
     # Raises google.api_core.exceptions.Conflict if the Dataset already
     # exists within the project.
-    # try:
-    dataset = client.create_dataset(dataset, timeout=30)  # Make an API request.
-    # logger.info(f"Created dataset {client.project}.{dataset.dataset_id}")
-    # except exceptions.Conflict as e:
-    # logger.exception(
-    # f"Dataset {client.project}.{dataset.dataset_id} already exists: {e}"
-    # )
-    # finally:
-    return dataset.dataset_id
+    try:
+        dataset = client.create_dataset(dataset, timeout=30)  # Make an API request.
+    except exceptions.Conflict:
+        pass
+    finally:
+        return dataset.dataset_id
 
 
 @logdec
@@ -1425,13 +1424,9 @@ def check_bq_dataset(
 
     dataset_id = f"{source}_{odata_version}_{id}"
 
-    # try:
-    client.get_dataset(dataset_id)  # Make an API request.
-    # logger.info(f"Dataset {dataset_id} already exists")
+    # Make an API request - will raise an exception if does not exist, causing the decorator to return None
+    client.get_dataset(dataset_id)
     return True
-    # except exceptions.NotFound as e:
-    #     logger.exception(f"Dataset {dataset_id} is not found: {e}")
-    #     return False
 
 
 @logdec
@@ -1623,8 +1618,6 @@ def main(
             "A third-party dataset cannot have 'cbs' as source: please provide correct 'source' parameter"
         )
     if check_gcp_env(gcp_env):
-        # logger.info(f"Processing dataset {id}")
-        # logger.info("TEST CHANGES")
         odata_version = check_v4(id=id, third_party=third_party)
         files_parquet = cbsodata_to_gbq(
             id=id,
@@ -1634,10 +1627,7 @@ def main(
             config=config,
             gcp_env=gcp_env,
             force=force,
-        )
-        # logger.info(
-        #     f"Completed dataset {id}"
-        # )  # TODO - add response from google if possible (some success/failure flag)
+        )  # TODO - add response from google if possible (some success/failure flag)
         if files_parquet:
             pq_file = Path(files_parquet.pop())
             local_folder = pq_file.parents[2]
