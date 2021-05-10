@@ -1,5 +1,4 @@
-# # Logger decorator to log general execution of functions.
-# Based on https://medium.com/swlh/add-log-decorators-to-your-python-project-84094f832181
+# Logging module, reading a logging configuration toml file, defining the logs output folder and creating a logging decorator that can be applied to any function.
 from pathlib import Path
 import sys
 import functools
@@ -24,6 +23,25 @@ logging.config.dictConfig(log_conf)
 
 
 def logdec(func):
+    """A logging decorator wrapping a function with a standard logging mechanism.
+
+    This decorator wraps a function with a standard logging mechanism, providing the following functionalities:
+    * Logs the calling of the function and the parameters passed to it when called.
+    * If no exception is raised during the function run - returns the result and logs the succesful completion (not the result).
+    * If an exception is raised - logs the exception and returns None.
+
+    Based on https://medium.com/swlh/add-log-decorators-to-your-python-project-84094f832181
+
+    Parameters
+    ----------
+    func : the function to be wrapped
+
+    Returns
+    -------
+    result or None
+        The result of the function if no exception was raised, None otherwise
+    """
+
     @functools.wraps(func)
     def logged(*args, **kwargs):
         # Create a list of the positional arguments passed to function
