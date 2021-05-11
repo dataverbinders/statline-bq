@@ -1,6 +1,5 @@
 # Logging module, reading a logging configuration toml file, defining the logs output folder and creating a logging decorator that can be applied to any function.
 from pathlib import Path
-import sys
 import functools
 import logging
 import logging.config
@@ -60,9 +59,9 @@ def logdec(func):
             result = func(*args, **kwargs)
             logger.info(f"Succesfully finished function {func.__name__}")
             return result
-        except:
+        except Exception as e:
             # Log exception if occurs in function
-            logger.error(f"Exception in {func.__name__}: {str(sys.exc_info()[1])}")
-            return None
+            logger.exception(f"Exception in {func.__name__}: {e}")
+            raise e
 
     return logged
