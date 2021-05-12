@@ -1,4 +1,7 @@
+import json
+from pathlib import Path
 import pytest
+import requests
 
 from statline_bq import __version__, config, utils
 
@@ -37,11 +40,22 @@ def config_file_toml(tmpdir):
 
 @pytest.fixture()
 def datasets_toml(tmpdir):
-    datasets_toml = """ids = ["83583NED", "83765NED", "84799NED", "84583NED", "84286NED"]"""
+    datasets_toml = (
+        """ids = ["83583NED", "83765NED", "84799NED", "84583NED", "84286NED"]"""
+    )
     file = tmpdir.join("datasets.toml")
     with open(file, "w") as f:
         f.write(datasets_toml)
     return file
+
+
+class MockResponse:
+    def __init__(self, id):
+        self.id = id
+        if self.id == "exists_in_v4":
+            self.status_code = 200
+        else:
+            self.status_code = None
 
 
 class TestConfig:
@@ -59,4 +73,39 @@ class TestUtils:
         assert utils.check_gcp_env("dev")
         with pytest.raises(ValueError):
             assert utils.check_gcp_env("foo")
+
+    @pytest.mark.parametrize(
+        "id, version", [("exists_in_v4", "v4"), ("not_exists_in_v4", "v3")]
+    )
+    def test_check_v4(self, monkeypatch, id, version):
+        def mock_get_v4(*args, **kwargs):
+            return MockResponse(id)
+
+        monkeypatch.setattr(requests, "get", mock_get_v4)
+        odata_version = utils.check_v4(id)
+        assert odata_version == version
+
+    def test_get_metadata_cbs(self):
+        # TODO can't think of a logical way to test this
+        pass
+
+    @pytest.mark.parametrize(
+        "metadata, shape",
+        [
+            (
+                "metadata_v3.json",
+                {"n_records": 304128, "n_columns": 10, "n_observations": None},
+            ),
+            (
+                "metadata_v4.json",
+                {"n_records": None, "n_columns": None, "n_observations": 2432},
+            ),
+        ],
+    )
+    def test_get_main_table_shape(self, metadata, shape):
+        # test with downloaded data
+        file_ = Path(__file__).parent / "data" / metadata
+        with open(file_, "r") as f:
+            meta = json.load(f)
+        assert utils.get_main_table_shape(meta) == shape
 
