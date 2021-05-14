@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Tuple
 from pathlib import Path
 import logging
 from shutil import rmtree
@@ -94,11 +94,13 @@ def cbsodata_to_local(
     source: str = "cbs",
     config: Box = None,
     out_dir: Union[Path, str] = None,
-) -> set:  # TODO change return value
-    """Downloads a CBS dataset and stores it locally as parquet files.
+) -> Tuple:  # TODO change return value
+    """Downloads a CBS dataset and stores it locally as parquet (and json) files.
 
     Retrieves a given dataset from CBS, and converts it locally to Parquet. The
-    Parquet files are stored locally.
+    Parquet files are stored locally. The dataset's metadata and the main table's
+    column descriptions are stored as json files in the same folder with the parquet
+    files.
 
     Parameters
     ---------
@@ -118,59 +120,47 @@ def cbsodata_to_local(
     config: Box
         Config object holding GCP and local paths
 
-    gcp_env: str
-        determines which GCP configuration to use from config.gcp
-    
-    force : bool, default = False
-        If set to True, processes datasets, even if Modified dates are
-        identical in source and target locations.
+    out_dir: Path or str
+        Local folder to place the output files. If set to None, creates a folder
+        within the temp directories of the OS based on the dataset source and id.
 
     Returns
     -------
-    files_parquet: set of Paths
-        A set with paths of local parquet files # TODO: replace with BQ job ids
+    pq_dir : Path
+        path to directory containing local converted files
+    
+    files_parquet : set of Paths
+        A set with paths of local parquet files
 
     Example
     -------
-    >>> from statline_bq.utils import check_v4, cbsodata_to_gbq
+    >>> from os import listdir
+    >>> from pathlib import Path
+    >>> from statline_bq.statline import check_v4
+    >>> from statline_bq.main import cbsodata_to_local
     >>> from statline_bq.config import get_config
     >>> id = "83583NED"
     >>> config = get_config("path/to/config.file")
-    >>> print(f"Processing dataset {id}")
+    >>> out_dir = Path("./dataset_83583NED")
     >>> odata_version = check_v4(id=id)
-    >>> cbsodata_to_gbq(
+    >>> cbsodata_to_local(
     ... id=id,
     ... odata_version=odata_version,
-    ... config=config
+    ... config=config,
+    ... out_dir=out_dir
     ... )
-    >>> print(f"Completed dataset {id}")
-    Processing dataset 83583NED
-    # More messages from depending on internal process
-    Completed dataset 83583NED
+    >>> listdir(out_dir)
+    ['cbs.v3.83583NED_DataProperties.parquet', 'cbs.v3.83583NED_BedrijfstakkenBranchesSBI2008.parquet', 'cbs.v3.83583NED_ColDescriptions.json', 'cbs.v3.83583NED_Bedrijfsgrootte.parquet', 'cbs.v3.83583NED_TypedDataSet.parquet', 'cbs.v3.83583NED_CategoryGroups.parquet', 'cbs.v3.83583NED_Perioden.parquet', 'cbs.v3.83583NED_Metadata.json']
+
 
     Notes
     -----
-    In **GCS**, the following "folders" and filenames structure is used:
-
-        "{project_name}/{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet"
-
-    for example:
-
-        "dataverbinders/dataverbinders/cbs/v3/84286NED/20201125/cbs.v3.84286NED_TypedDataSet.parquet"
-    _________
-    In **BQ**, the following structure and table names are used:
-
-        "[project/]/{source}_{version}_{dataset_id}/{dataset_id}/{table_name}"
-
-    for example:
-
-        "[dataverbinders/]/cbs_v3_83765NED/83765NED_Observations"
 
     Odata version 3
     ---------------
 
-    For given dataset id, the following tables are uploaded into GCS and linked in
-    GBQ (taking `cbs` as default and `83583NED` as example):
+    For given dataset id, the following tables are downloaded (taking `cbs` as default
+    and `83583NED` as example):
 
     - "cbs.v3.83583NED_DataProperties" - Description of topics and dimensions contained in table
     - "cbs.v3.83583NED_{DimensionName}" - Separate dimension tables
@@ -182,20 +172,21 @@ def cbsodata_to_local(
     Odata Version 4
     ---------------
 
-    For a given dataset id, the following tables are ALWAYS uploaded into GCS
-    and linked in GBQ (taking `cbs` as default and `83765NED` as example):
+    For a given dataset id, the following tables are ALWAYS downloaded (taking `cbs` as
+    default and `83765NED` as example):
 
     - "cbs.v4.83765NED_Observations" - The actual values of the dataset (***main table***)
     - "cbs.v4.83765NED_MeasureCodes" - Describing the codes that appear in the Measure column of the Observations table.
     - "cbs.v4.83765NED_Dimensions" - Information regarding the dimensions
 
-    Additionally, this function will upload all other tables related to the dataset, except for `Properties`.
+    Additionally, this function will download all other tables related to the dataset, except
+    for `Properties`.
         
     These may include:
 
     - "cbs.v4.83765NED_MeasureGroups" - Describing the hierarchy of the Measures
 
-    And, for each Dimension listed in the `Dimensions` table (i.e. `{Dimension_1}`)
+    And, a table for each Dimension listed in the `Dimensions` table (i.e. `{Dimension_1}`)
     
     - "cbs.v4.83765NED_{Dimension_1}Codes"
     - "cbs.v4.83765NED_{Dimension_1}Groups" (IF IT EXISTS)
