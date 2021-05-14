@@ -159,7 +159,6 @@ def convert_ndjsons_to_parquet(
     return pq_file
 
 
-
 @logdec
 def get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
     """Gets the filenames from an iterable of Path-like objects
