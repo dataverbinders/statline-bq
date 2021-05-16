@@ -12,19 +12,19 @@ from statline_bq.statline import (
     _get_urls,
     get_metadata_cbs,
     _get_main_table_shape,
-    tables_to_parquet,
+    dataset_to_parquet,
     _get_column_descriptions,
 )
 from statline_bq.gcpl import (
-    get_metadata_gcp,
-    set_gcp,
+    _get_metadata_gcp,
+    _set_gcp,
     upload_to_gcs,
     gcs_to_gbq,
-    get_col_descs_from_gcs,
-    bq_update_main_table_col_descriptions,
+    _get_col_descs_from_gcs,
+    _bq_update_main_table_col_descriptions,
 )
 from statline_bq.utils import (
-    check_gcp_env,
+    _check_gcp_env,
     create_dir,
     create_named_dir,
     dict_to_json_file,
@@ -36,25 +36,31 @@ logger = logging.getLogger(__name__)
 
 
 @logdec
-def skip_dataset(
+def _skip_dataset(
     id: str,
     source: str,
     third_party: bool,
     odata_version: str,
     gcp: Box,
     force: bool,
-    credentials: Credentials = None,
+    credentials: Credentials,
 ) -> bool:
     """Checks whether a dataset should be skipped, given the "last modified" dates from the CBS version and the GCP version.
 
     Parameters
     ----------
-    cbs_modified : str
-        "last modifed" string from the CBS metadata
-    gcp_modified : str
-        "last modifed" string from the GCP metadata
+    id: str
+        CBS Dataset id, i.e. "83583NED"
+    source: str
+        The source of the dataset.
+    third_party: bool
+        Flag to indicate dataset is not originally from CBS.
+    odata_version: str
+        version of the odata for this dataset - must be either "v3" or "v4".
     force : bool
         flag to signal forcing the processing of a dataset even if the dates match.
+    credentials : Credentials
+        Google oauth2 credentials
 
     Returns
     -------
@@ -67,7 +73,7 @@ def skip_dataset(
     source_meta = get_metadata_cbs(
         id=id, third_party=third_party, odata_version=odata_version
     )
-    gcp_meta = get_metadata_gcp(
+    gcp_meta = _get_metadata_gcp(
         id=id,
         source=source,
         odata_version=odata_version,
@@ -87,7 +93,7 @@ def skip_dataset(
 
 
 @logdec
-def cbsodata_to_local(
+def _cbsodata_to_local(
     id: str,
     odata_version: str,
     third_party: str = False,
@@ -204,7 +210,8 @@ def cbsodata_to_local(
     )
     # Create directory to store parquest files locally
     if out_dir:
-        pq_dir = create_dir(out_dir)
+        out_dir = Path(out_dir)
+        pq_dir = create_dir(out_dir / "parquet")
     else:
         pq_dir = create_named_dir(
             id=id, odata_version=odata_version, source=source, config=config
@@ -212,7 +219,7 @@ def cbsodata_to_local(
     # Set main table shape to use for parallel fetching later
     main_table_shape = _get_main_table_shape(source_meta)
     # Fetch each table from urls, convert to parquet and store locally
-    files_parquet = tables_to_parquet(
+    files_parquet = dataset_to_parquet(
         id=id,
         third_party=third_party,
         urls=urls,
@@ -257,7 +264,7 @@ def cbsodata_to_local(
 
 
 @logdec
-def cbsodata_to_gcs(
+def _cbsodata_to_gcs(
     id: str,
     odata_version: str,
     third_party: str = False,
@@ -381,7 +388,7 @@ def cbsodata_to_gcs(
     """
 
     # download data and store locally as parquet
-    pq_dir, files_parquet = cbsodata_to_local(
+    pq_dir, files_parquet = _cbsodata_to_local(
         id=id,
         odata_version=odata_version,
         third_party=third_party,
@@ -405,7 +412,7 @@ def cbsodata_to_gcs(
 
 
 @logdec
-def cbsodata_to_gbq(
+def _cbsodata_to_gbq(
     id: str,
     odata_version: str,
     third_party: str = False,
@@ -527,7 +534,7 @@ def cbsodata_to_gbq(
     [^odatav4]: https://dataportal.cbs.nl/info/ontwikkelaars
     """
     # download data and store locally as parquet
-    pq_dir, files_parquet = cbsodata_to_local(
+    pq_dir, files_parquet = _cbsodata_to_local(
         id=id,
         odata_version=odata_version,
         third_party=third_party,
@@ -557,7 +564,7 @@ def cbsodata_to_gbq(
         credentials=credentials,
     )
     # Add column description to main table
-    desc_dict = get_col_descs_from_gcs(
+    desc_dict = _get_col_descs_from_gcs(
         id=id,
         source=source,
         odata_version=odata_version,
@@ -568,7 +575,7 @@ def cbsodata_to_gbq(
 
     # Add column descriptions to main table (only relevant for v3, as v4 is a "long format")
     if odata_version == "v3":
-        bq_update_main_table_col_descriptions(
+        _bq_update_main_table_col_descriptions(
             dataset_ref=dataset_ref,
             descriptions=desc_dict,
             gcp=gcp,
@@ -595,10 +602,11 @@ def main(
 ) -> Path:
     """Downloads a CBS dataset, converts it to parquet and stores it either locally or on GCP.
 
-    Retrieves a given dataset id from CBS, and converts it locally to Parquet. The
-    Parquet files are uploaded to Google Cloud Storage, and a dataset is created
-    in Google BigQuery, under which each permanenet tables are nested,linked to the
-    Parquet files - each being a table of the dataset.
+    Retrieves a given dataset id from CBS, and converts it to Parquet. The Parquet
+    files are stored locally, or only uploaded to Google Cloud Storage, or uploaded
+    to Google Cloud Storage and a dataset is created in Google BigQuery, under which
+    each permanenet tables are nested,linked to the Parquet files - each being a
+    table of the dataset.
 
     Parameters
     ---------
@@ -642,23 +650,37 @@ def main(
     files_parquet: set of Paths
         A set with paths of local parquet files # TODO: change and update
 
-    Example
-    -------
+    Examples
+    --------
+    >>> # Storing files locally
     >>> from statline_bq.utils import check_v4, cbsodata_to_gbq
     >>> from statline_bq.config import get_config
     >>> id = "83583NED"
     >>> config = get_config("path/to/config.file")
-    >>> print(f"Processing dataset {id}")
-    >>> odata_version = check_v4(id=id)
-    >>> cbsodata_to_gbq(
-    ... id=id,
-    ... odata_version=odata_version,
-    ... config=config
+    >>> out_dir = main(
+    ...     id=id,
+    ...     config=config,
+    ...     gcp_env="dev",
+    ...     endpoint="local",
+    ...     local_dir = "./my_parquet_folder/",
+    ...     force=False
     ... )
-    >>> print(f"Completed dataset {id}")
-    Processing dataset 83583NED
-    # More messages from depending on internal process
-    Completed dataset 83583NED
+    >>> listdir(out_dir)
+    ['cbs.v3.83583NED_DataProperties.parquet', 'cbs.v3.83583NED_BedrijfstakkenBranchesSBI2008.parquet', 'cbs.v3.83583NED_ColDescriptions.json', 'cbs.v3.83583NED_Bedrijfsgrootte.parquet', 'cbs.v3.83583NED_TypedDataSet.parquet', 'cbs.v3.83583NED_CategoryGroups.parquet', 'cbs.v3.83583NED_Perioden.parquet', 'cbs.v3.83583NED_Metadata.json']
+
+
+    >>> from statline_bq.utils import check_v4, cbsodata_to_gbq
+    >>> from statline_bq.config import get_config
+    >>> id = "83583NED"
+    >>> config = get_config("path/to/config.file")
+    >>> local_folder = main(
+    ...     id=id,
+    ...     config=config,
+    ...     gcp_env="prod",
+    ...     endpoint="bq",
+    ...     force=False
+    ... )
+    
 
     Notes
     -----
@@ -717,34 +739,43 @@ def main(
     [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-ewopendata-services.pdf
     [^odatav4]: https://dataportal.cbs.nl/info/ontwikkelaars
     """
-    gcp_env = gcp_env.lower()
     if third_party and source == "cbs":
         raise ValueError(
             "A third-party dataset cannot have 'cbs' as source: please provide correct 'source' parameter"
         )
-    if check_gcp_env(gcp_env):
-        odata_version = _check_v4(id=id, third_party=third_party)
-        # Set gcp environment
-        gcp = set_gcp(config, gcp_env, source)
-        # Check if upload is needed
-        if (
-            skip_dataset(
-                id=id,
-                source=source,
-                third_party=third_party,
-                odata_version=odata_version,
-                gcp=gcp,
-                force=force,
-                credentials=credentials,
-            )
-            and endpoint != "local"
+    odata_version = _check_v4(id=id, third_party=third_party)
+    if endpoint not in ("local", "bq", "gcs"):
+        raise ValueError("endpoint must be one of ['bq', 'gcs', 'local']")
+    # no gcp interaction - only local
+    elif endpoint == "local":
+        _, files_parquet = _cbsodata_to_local(
+            id=id,
+            odata_version=odata_version,
+            third_party=third_party,
+            source=source,
+            config=config,
+            out_dir=local_dir,
+        )
+    # interaction with gcp
+    else:
+        gcp_env = gcp_env.lower()
+        _check_gcp_env(gcp_env)
+        gcp = _set_gcp(config, gcp_env, source)
+        if _skip_dataset(
+            id=id,
+            source=source,
+            third_party=third_party,
+            odata_version=odata_version,
+            gcp=gcp,
+            force=force,
+            credentials=credentials,
         ):
             logger.info(
                 f"Skipping dataset {id} because the same dataset exists on GCP, with the same 'Modified' date"
             )
             return None
         if endpoint == "bq":
-            files_parquet = cbsodata_to_gbq(
+            files_parquet = _cbsodata_to_gbq(
                 id=id,
                 odata_version=odata_version,
                 third_party=third_party,
@@ -754,7 +785,7 @@ def main(
                 credentials=credentials,
             )  # TODO - add response from google if possible (some success/failure flag)
         elif endpoint == "gcs":
-            files_parquet = cbsodata_to_gcs(
+            files_parquet = _cbsodata_to_gcs(
                 id=id,
                 odata_version=odata_version,
                 third_party=third_party,
@@ -763,33 +794,17 @@ def main(
                 gcp=gcp,
                 credentials=credentials,
             )
-        elif endpoint == "local":
-            _, files_parquet = cbsodata_to_local(
-                id=id,
-                odata_version=odata_version,
-                third_party=third_party,
-                source=source,
-                config=config,
-                out_dir=local_dir,
-            )
-        else:
-            raise ValueError("endpoint must be one of ['bq', 'gcs', 'local']")
-        if files_parquet:
-            pq_file = Path(files_parquet.pop())
-            local_folder = pq_file.parents[2]
-        else:
-            local_folder = None
-        return local_folder
+    return files_parquet
 
 
 if __name__ == "__main__":
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
-    # # Test cbs core dataset, odata_version is v3
-    local_folder = main(
-        "83583NED", config=config, gcp_env="dev", endpoint="local", force=False
-    )
+    # Test cbs core dataset, odata_version is v3
+    main("83583NED", config=config, gcp_env="dev", endpoint="bq", force=True)
+    # Test cbs core dataset, odata_version is v3 - local only
+    # main("83583NED", config=config, endpoint="local", local_dir="./temp/")
     # # Test skipping a dataset, odata_version is v3
     # local_folder = main("83583NED", config=config, gcp_env="dev", force=False)
     # Test cbs core dataset, odata_version is v3, contaiing empty url (CategoryGroups)

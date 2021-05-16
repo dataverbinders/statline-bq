@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @logdec
-def check_gcp_env(gcp_env: str, options: List[str] = ["dev", "test", "prod"]) -> bool:
+def _check_gcp_env(gcp_env: str, options: List[str] = ["dev", "test", "prod"]) -> bool:
     """Check that gcp_env is one of the permitted options
 
     Parameters
@@ -94,31 +94,31 @@ def dict_to_json_file(
     return json_file
 
 
-@logdec
-def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
-    """Gets the "modified" field from a dict containing a dataset's metadata.
+# @logdec
+# def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
+#     """Gets the "modified" field from a dict containing a dataset's metadata.
 
-    Parameters
-    ----------
-    gcp_meta : dict
-        A dataset's metadata
-    force : bool, optional
-        [description], by default False
+#     Parameters
+#     ----------
+#     gcp_meta : dict
+#         A dataset's metadata
+#     force : bool, optional
+#         [description], by default False
 
-    Returns
-    -------
-    Union[str, None]
-        [description]
-    """
-    # TODO: can we remove `force` from here, as it is handled in skip_dataset? - run unit tests to verify
-    if not force:
-        try:
-            gcp_modified = gcp_meta.get("Modified")
-        except AttributeError:
-            gcp_modified = None
-    else:
-        gcp_modified = None
-    return gcp_modified
+#     Returns
+#     -------
+#     Union[str, None]
+#         [description]
+#     """
+#     # TODO: can we remove `force` from here, as it is handled in skip_dataset? - run unit tests to verify
+#     if not force:
+#         try:
+#             gcp_modified = gcp_meta.get("Modified")
+#         except AttributeError:
+#             gcp_modified = None
+#     else:
+#         gcp_modified = None
+#     return gcp_modified
 
 
 @logdec
