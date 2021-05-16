@@ -94,35 +94,8 @@ def dict_to_json_file(
     return json_file
 
 
-# @logdec
-# def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
-#     """Gets the "modified" field from a dict containing a dataset's metadata.
-
-#     Parameters
-#     ----------
-#     gcp_meta : dict
-#         A dataset's metadata
-#     force : bool, optional
-#         [description], by default False
-
-#     Returns
-#     -------
-#     Union[str, None]
-#         [description]
-#     """
-#     # TODO: can we remove `force` from here, as it is handled in skip_dataset? - run unit tests to verify
-#     if not force:
-#         try:
-#             gcp_modified = gcp_meta.get("Modified")
-#         except AttributeError:
-#             gcp_modified = None
-#     else:
-#         gcp_modified = None
-#     return gcp_modified
-
-
 @logdec
-def create_dir(path: Path) -> Path:
+def _create_dir(path: Path) -> Path:
     """Checks whether a path exists and is a directory, and creates it if not.
 
     Parameters
@@ -160,7 +133,7 @@ def convert_ndjsons_to_parquet(
 
 
 @logdec
-def get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
+def _get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
     """Gets the filenames from an iterable of Path-like objects
 
     Parameters
@@ -195,7 +168,7 @@ def get_file_names(paths: Iterable[Union[str, PathLike]]) -> list:
 
 
 @logdec
-def create_named_dir(
+def _create_named_dir(
     id: str, odata_version: str, source: str = "cbs", config: Box = None
 ) -> Path:
     """Creates a directory according to a specific structure.
@@ -248,12 +221,12 @@ def create_named_dir(
     path = source_dir / Path(
         f"{odata_version}/{id}/{datetime.today().date().strftime('%Y%m%d')}/parquet"
     )
-    path_to_named_dir = create_dir(path)
+    path_to_named_dir = _create_dir(path)
     return path_to_named_dir
 
 
 @logdec
-def url_to_ndjson(target_url: str, ndjson_folder: Union[Path, str]):
+def _url_to_ndjson(target_url: str, ndjson_folder: Union[Path, str]):
     """Fetch json formatted data from a specific CBS table url and write each page as n ndjson file.
 
     Parameters

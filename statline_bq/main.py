@@ -25,10 +25,10 @@ from statline_bq.gcpl import (
 )
 from statline_bq.utils import (
     _check_gcp_env,
-    create_dir,
-    create_named_dir,
+    _create_dir,
+    _create_named_dir,
     dict_to_json_file,
-    get_file_names,
+    _get_file_names,
 )
 from statline_bq.log import logdec
 
@@ -137,70 +137,6 @@ def _cbsodata_to_local(
     
     files_parquet : set of Paths
         A set with paths of local parquet files
-
-    Example
-    -------
-    >>> from os import listdir
-    >>> from pathlib import Path
-    >>> from statline_bq.statline import check_v4
-    >>> from statline_bq.main import cbsodata_to_local
-    >>> from statline_bq.config import get_config
-    >>> id = "83583NED"
-    >>> config = get_config("path/to/config.file")
-    >>> out_dir = Path("./dataset_83583NED")
-    >>> odata_version = check_v4(id=id)
-    >>> cbsodata_to_local(
-    ... id=id,
-    ... odata_version=odata_version,
-    ... config=config,
-    ... out_dir=out_dir
-    ... )
-    >>> listdir(out_dir)
-    ['cbs.v3.83583NED_DataProperties.parquet', 'cbs.v3.83583NED_BedrijfstakkenBranchesSBI2008.parquet', 'cbs.v3.83583NED_ColDescriptions.json', 'cbs.v3.83583NED_Bedrijfsgrootte.parquet', 'cbs.v3.83583NED_TypedDataSet.parquet', 'cbs.v3.83583NED_CategoryGroups.parquet', 'cbs.v3.83583NED_Perioden.parquet', 'cbs.v3.83583NED_Metadata.json']
-
-
-    Notes
-    -----
-
-    Odata version 3
-    ---------------
-
-    For given dataset id, the following tables are downloaded (taking `cbs` as default
-    and `83583NED` as example):
-
-    - "cbs.v3.83583NED_DataProperties" - Description of topics and dimensions contained in table
-    - "cbs.v3.83583NED_{DimensionName}" - Separate dimension tables
-    - "cbs.v3.83583NED_TypedDataSet" - The TypedDataset (***main table***)
-    - "cbs.v3.83583NED_CategoryGroups" - Grouping of dimensions
-
-    See *Handleiding CBS Open Data Services (v3)*[^odatav3] for details.
-
-    Odata Version 4
-    ---------------
-
-    For a given dataset id, the following tables are ALWAYS downloaded (taking `cbs` as
-    default and `83765NED` as example):
-
-    - "cbs.v4.83765NED_Observations" - The actual values of the dataset (***main table***)
-    - "cbs.v4.83765NED_MeasureCodes" - Describing the codes that appear in the Measure column of the Observations table.
-    - "cbs.v4.83765NED_Dimensions" - Information regarding the dimensions
-
-    Additionally, this function will download all other tables related to the dataset, except
-    for `Properties`.
-        
-    These may include:
-
-    - "cbs.v4.83765NED_MeasureGroups" - Describing the hierarchy of the Measures
-
-    And, a table for each Dimension listed in the `Dimensions` table (i.e. `{Dimension_1}`)
-    
-    - "cbs.v4.83765NED_{Dimension_1}Codes"
-    - "cbs.v4.83765NED_{Dimension_1}Groups" (IF IT EXISTS)
-
-    See *Informatie voor Ontwikelaars*[^odatav4] for details.
-
-    [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-ewopendata-services.pdf
-    [^odatav4]: https://dataportal.cbs.nl/info/ontwikkelaars
     """
     # Get all table-specific urls for the given dataset id
     urls = _get_urls(id=id, odata_version=odata_version, third_party=third_party)
@@ -211,9 +147,9 @@ def _cbsodata_to_local(
     # Create directory to store parquest files locally
     if out_dir:
         out_dir = Path(out_dir)
-        pq_dir = create_dir(out_dir / "parquet")
+        pq_dir = _create_dir(out_dir / "parquet")
     else:
-        pq_dir = create_named_dir(
+        pq_dir = _create_named_dir(
             id=id, odata_version=odata_version, source=source, config=config
         )
     # Set main table shape to use for parallel fetching later
@@ -310,81 +246,6 @@ def _cbsodata_to_gcs(
     -------
     files_parquet: set of Paths
         A set with paths of local parquet files # TODO: replace with BQ job ids
-
-    Example
-    -------
-    >>> from statline_bq.utils import check_v4, cbsodata_to_gbq
-    >>> from statline_bq.config import get_config
-    >>> id = "83583NED"
-    >>> config = get_config("path/to/config.file")
-    >>> print(f"Processing dataset {id}")
-    >>> odata_version = check_v4(id=id)
-    >>> cbsodata_to_gbq(
-    ... id=id,
-    ... odata_version=odata_version,
-    ... config=config
-    ... )
-    >>> print(f"Completed dataset {id}")
-    Processing dataset 83583NED
-    # More messages from depending on internal process
-    Completed dataset 83583NED
-
-    Notes
-    -----
-    In **GCS**, the following "folders" and filenames structure is used:
-
-        "{project_name}/{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet"
-
-    for example:
-
-        "dataverbinders/dataverbinders/cbs/v3/84286NED/20201125/cbs.v3.84286NED_TypedDataSet.parquet"
-    _________
-    In **BQ**, the following structure and table names are used:
-
-        "[project/]/{source}_{version}_{dataset_id}/{dataset_id}/{table_name}"
-
-    for example:
-
-        "[dataverbinders/]/cbs_v3_83765NED/83765NED_Observations"
-
-    Odata version 3
-    ---------------
-
-    For given dataset id, the following tables are uploaded into GCS and linked in
-    GBQ (taking `cbs` as default and `83583NED` as example):
-
-    - "cbs.v3.83583NED_DataProperties" - Description of topics and dimensions contained in table
-    - "cbs.v3.83583NED_{DimensionName}" - Separate dimension tables
-    - "cbs.v3.83583NED_TypedDataSet" - The TypedDataset (***main table***)
-    - "cbs.v3.83583NED_CategoryGroups" - Grouping of dimensions
-
-    See *Handleiding CBS Open Data Services (v3)*[^odatav3] for details.
-
-    Odata Version 4
-    ---------------
-
-    For a given dataset id, the following tables are ALWAYS uploaded into GCS
-    and linked in GBQ (taking `cbs` as default and `83765NED` as example):
-
-    - "cbs.v4.83765NED_Observations" - The actual values of the dataset (***main table***)
-    - "cbs.v4.83765NED_MeasureCodes" - Describing the codes that appear in the Measure column of the Observations table.
-    - "cbs.v4.83765NED_Dimensions" - Information regarding the dimensions
-
-    Additionally, this function will upload all other tables related to the dataset, except for `Properties`.
-        
-    These may include:
-
-    - "cbs.v4.83765NED_MeasureGroups" - Describing the hierarchy of the Measures
-
-    And, for each Dimension listed in the `Dimensions` table (i.e. `{Dimension_1}`)
-    
-    - "cbs.v4.83765NED_{Dimension_1}Codes"
-    - "cbs.v4.83765NED_{Dimension_1}Groups" (IF IT EXISTS)
-
-    See *Informatie voor Ontwikelaars*[^odatav4] for details.
-
-    [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-ewopendata-services.pdf
-    [^odatav4]: https://dataportal.cbs.nl/info/ontwikkelaars
     """
 
     # download data and store locally as parquet
@@ -457,81 +318,6 @@ def _cbsodata_to_gbq(
     -------
     files_parquet: set of Paths
         A set with paths of local parquet files # TODO: replace with BQ job ids
-
-    Example
-    -------
-    >>> from statline_bq.utils import check_v4, cbsodata_to_gbq
-    >>> from statline_bq.config import get_config
-    >>> id = "83583NED"
-    >>> config = get_config("path/to/config.file")
-    >>> print(f"Processing dataset {id}")
-    >>> odata_version = check_v4(id=id)
-    >>> cbsodata_to_gbq(
-    ... id=id,
-    ... odata_version=odata_version,
-    ... config=config
-    ... )
-    >>> print(f"Completed dataset {id}")
-    Processing dataset 83583NED
-    # More messages from depending on internal process
-    Completed dataset 83583NED
-
-    Notes
-    -----
-    In **GCS**, the following "folders" and filenames structure is used:
-
-        "{project_name}/{bucket_name}/{source}/{version}/{dataset_id}/{date_of_upload}/{source}.{version}.{dataset_id}_{table_name}.parquet"
-
-    for example:
-
-        "dataverbinders/dataverbinders/cbs/v3/84286NED/20201125/cbs.v3.84286NED_TypedDataSet.parquet"
-    _________
-    In **BQ**, the following structure and table names are used:
-
-        "[project/]/{source}_{version}_{dataset_id}/{dataset_id}/{table_name}"
-
-    for example:
-
-        "[dataverbinders/]/cbs_v3_83765NED/83765NED_Observations"
-
-    Odata version 3
-    ---------------
-
-    For given dataset id, the following tables are uploaded into GCS and linked in
-    GBQ (taking `cbs` as default and `83583NED` as example):
-
-    - "cbs.v3.83583NED_DataProperties" - Description of topics and dimensions contained in table
-    - "cbs.v3.83583NED_{DimensionName}" - Separate dimension tables
-    - "cbs.v3.83583NED_TypedDataSet" - The TypedDataset (***main table***)
-    - "cbs.v3.83583NED_CategoryGroups" - Grouping of dimensions
-
-    See *Handleiding CBS Open Data Services (v3)*[^odatav3] for details.
-
-    Odata Version 4
-    ---------------
-
-    For a given dataset id, the following tables are ALWAYS uploaded into GCS
-    and linked in GBQ (taking `cbs` as default and `83765NED` as example):
-
-    - "cbs.v4.83765NED_Observations" - The actual values of the dataset (***main table***)
-    - "cbs.v4.83765NED_MeasureCodes" - Describing the codes that appear in the Measure column of the Observations table.
-    - "cbs.v4.83765NED_Dimensions" - Information regarding the dimensions
-
-    Additionally, this function will upload all other tables related to the dataset, except for `Properties`.
-        
-    These may include:
-
-    - "cbs.v4.83765NED_MeasureGroups" - Describing the hierarchy of the Measures
-
-    And, for each Dimension listed in the `Dimensions` table (i.e. `{Dimension_1}`)
-    
-    - "cbs.v4.83765NED_{Dimension_1}Codes"
-    - "cbs.v4.83765NED_{Dimension_1}Groups" (IF IT EXISTS)
-
-    See *Informatie voor Ontwikelaars*[^odatav4] for details.
-
-    [^odatav3]: https://www.cbs.nl/-/media/statline/documenten/handleiding-cbs-ewopendata-services.pdf
-    [^odatav4]: https://dataportal.cbs.nl/info/ontwikkelaars
     """
     # download data and store locally as parquet
     pq_dir, files_parquet = _cbsodata_to_local(
@@ -552,7 +338,7 @@ def _cbsodata_to_gbq(
     )
 
     # Get file names for BQ dataset ids
-    file_names = get_file_names(files_parquet)
+    file_names = _get_file_names(files_parquet)
     # Create table in GBQ
     dataset_ref = gcs_to_gbq(
         id=id,
@@ -669,6 +455,7 @@ def main(
     ['cbs.v3.83583NED_DataProperties.parquet', 'cbs.v3.83583NED_BedrijfstakkenBranchesSBI2008.parquet', 'cbs.v3.83583NED_ColDescriptions.json', 'cbs.v3.83583NED_Bedrijfsgrootte.parquet', 'cbs.v3.83583NED_TypedDataSet.parquet', 'cbs.v3.83583NED_CategoryGroups.parquet', 'cbs.v3.83583NED_Perioden.parquet', 'cbs.v3.83583NED_Metadata.json']
 
 
+    >>> # Creating a dataset in Google BigQuery
     >>> from statline_bq.utils import check_v4, cbsodata_to_gbq
     >>> from statline_bq.config import get_config
     >>> id = "83583NED"
