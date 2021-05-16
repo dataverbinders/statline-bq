@@ -12,7 +12,7 @@ from statline_bq.log import logdec
 
 
 @logdec
-def check_v4(id: str, third_party: bool = False) -> str:
+def _check_v4(id: str, third_party: bool = False) -> str:
     """Checks whether a certain CBS table exists as OData Version "v4".
 
     Parameters
@@ -49,7 +49,7 @@ def check_v4(id: str, third_party: bool = False) -> str:
 
 
 @logdec
-def get_urls(
+def _get_urls(
     id: str, odata_version: str, third_party: bool = False
 ) -> dict:  # TODO: Rename to get_dataset_urls (contrast with get_table_urls)
     """Returns a dict with urls of all dataset tables given a valid CBS dataset id.
@@ -168,7 +168,7 @@ def get_metadata_cbs(id: str, third_party: bool, odata_version: str) -> dict:
 
 
 @logdec
-def get_main_table_shape(metadata: dict) -> dict:
+def _get_main_table_shape(metadata: dict) -> dict:
     """Reads into a CBS dataset metadata and returns the main table's shape as a dict.
 
     - For v3 odata, n_records and n_columns exist in the metadata
@@ -195,7 +195,7 @@ def get_main_table_shape(metadata: dict) -> dict:
 
 
 @logdec
-def generate_table_urls(base_url: str, n_records: int, odata_version: str) -> list:
+def _generate_table_urls(base_url: str, n_records: int, odata_version: str) -> list:
     """Creates a list of urls for parallel fetching.
 
     Given a base url, this function creates a list of multiple urls, with query parameters
@@ -238,7 +238,7 @@ def generate_table_urls(base_url: str, n_records: int, odata_version: str) -> li
 
 
 @logdec
-def get_schema_cbs(metadata_url, odata_version) -> pa.Schema:
+def _get_schema_cbs(metadata_url, odata_version) -> pa.Schema:
     """Returns a pyarrow.Schema for the main table of a cbs dataset given its base metadata url.
 
     Parameters
@@ -309,7 +309,7 @@ def get_schema_cbs(metadata_url, odata_version) -> pa.Schema:
 
 
 @logdec
-def get_column_descriptions(urls: dict, odata_version: str) -> dict:
+def _get_column_descriptions(urls: dict, odata_version: str) -> dict:
     """Gets the column descriptions from CBS.
 
     Wrapper function to call the correct version function which in turn gets
@@ -340,14 +340,14 @@ def get_column_descriptions(urls: dict, odata_version: str) -> dict:
         # column_descriptions = get_column_decriptions_v4(urls["Properties"])
         return
     elif odata_version.lower() == "v3":
-        column_descriptions = get_column_descriptions_v3(urls["DataProperties"])
+        column_descriptions = _get_column_descriptions_v3(urls["DataProperties"])
     else:
         raise ValueError("odata version must be either 'v3' or 'v4'")
     return column_descriptions
 
 
 @logdec
-def get_column_descriptions_v3(url_data_properties: str) -> dict:
+def _get_column_descriptions_v3(url_data_properties: str) -> dict:
     """Gets the column descriptions for the TypedDataSet of a CBS dataset V3
 
     Parameters
@@ -378,7 +378,7 @@ def get_column_descriptions_v3(url_data_properties: str) -> dict:
 
 
 @logdec
-def tables_to_parquet(
+def dataset_to_parquet(
     id: str,
     third_party: bool,
     urls: dict,
@@ -440,7 +440,7 @@ def tables_to_parquet(
             metadata_url = "/".join(url.split("/")[:-1]) + "/$metadata"
             # TODO: add support for v4 (getting 406 error on requests inside get_schema_cbs)
             if odata_version == "v3":
-                schema = get_schema_cbs(metadata_url, odata_version)
+                schema = _get_schema_cbs(metadata_url, odata_version)
         else:
             table_shape = {
                 "n_records": None,
@@ -451,11 +451,11 @@ def tables_to_parquet(
 
         if odata_version == "v3":
             # Generate all table urls
-            table_urls = generate_table_urls(
+            table_urls = _generate_table_urls(
                 url, table_shape["n_records"], odata_version
             )
         elif odata_version == "v4":
-            table_urls = generate_table_urls(
+            table_urls = _generate_table_urls(
                 url, table_shape["n_observations"], odata_version
             )
 
