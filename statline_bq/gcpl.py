@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 @logdec
-def set_gcp(config: Box, gcp_env: str, source: str) -> Box:
+def _set_gcp(config: Box, gcp_env: str, source: str) -> Box:
     """Sets the desired GCP donciguration
 
     Parameters
@@ -51,14 +51,14 @@ def set_gcp(config: Box, gcp_env: str, source: str) -> Box:
 
 
 @logdec
-def get_latest_folder(
+def _get_latest_folder(
     gcs_folder: str, gcp: Box, credentials: Credentials = None
 ) -> Union[str, None]:
     """Returns the latest subfolder from a "folder" in GCP[^folders].
-    
+
     This function assumes the folders are named with `project-id/cbs/[v3|v4]/dataset-id/YYYYMMDD`,
     and that no further subfolders exist within a YYYYMMDD folder.
-    
+
     For example, assuming the folder "cbs/v3/83583NED/" is populated with subfolders:
 
     - "cbs/v3/83583NED/20191225"
@@ -98,7 +98,7 @@ def get_latest_folder(
 
 
 @logdec
-def get_metadata_gcp(
+def _get_metadata_gcp(
     id: str, source: str, odata_version: str, gcp: Box, credentials: Credentials = None,
 ) -> Union[dict, None]:
     """Gets a dataset's metadata from GCP.
@@ -107,7 +107,7 @@ def get_metadata_gcp(
     naming convention: `project-id/cbs/[v3|v4]/dataset-id/YYYYMMDD`, and that
     within these folders the dataset's metadata is a json file named
     'cbs.[v3|v4].{dataset_id}_Metadata.json'. For example:
-    
+
         - 'cbs.v3.83583NED_Metadata.json'
 
     Parameters
@@ -130,38 +130,38 @@ def get_metadata_gcp(
     client = storage.Client(project=gcp.project_id, credentials=credentials)
     bucket = client.get_bucket(gcp.bucket)
     gcs_folder = f"{source}/{odata_version}/{id}"
-    gcs_folder = get_latest_folder(gcs_folder, gcp)
+    gcs_folder = _get_latest_folder(gcs_folder, gcp)
     blob = bucket.get_blob(f"{gcs_folder}/{source}.{odata_version}.{id}_Metadata.json")
     # If no such blob exists, the error will be caught by @logdec, and None would be returned instead
     meta = json.loads(blob.download_as_string())
     return meta
 
 
-@logdec
-def get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
-    """Gets the "modified" field from a dict containing a dataset's metadata.
+# @logdec
+# def _get_gcp_modified(gcp_meta: dict, force: bool = False) -> Union[str, None]:
+#     """Gets the "modified" field from a dict containing a dataset's metadata.
 
-    Parameters
-    ----------
-    gcp_meta : dict
-        A dataset's metadata
-    force : bool, optional
-        [description], by default False
+#     Parameters
+#     ----------
+#     gcp_meta : dict
+#         A dataset's metadata
+#     force : bool, optional
+#         [description], by default False
 
-    Returns
-    -------
-    Union[str, None]
-        [description]
-    """
-    # TODO: can we remove `force` from here, as it is handled in skip_dataset? - run unit tests to verify
-    if not force:
-        try:
-            gcp_modified = gcp_meta.get("Modified")
-        except AttributeError:
-            gcp_modified = None
-    else:
-        gcp_modified = None
-    return gcp_modified
+#     Returns
+#     -------
+#     Union[str, None]
+#         [description]
+#     """
+#     # TODO: can we remove `force` from here, as it is handled in skip_dataset? - run unit tests to verify
+#     if not force:
+#         try:
+#             gcp_modified = gcp_meta.get("Modified")
+#         except AttributeError:
+#             gcp_modified = None
+#     else:
+#         gcp_modified = None
+#     return gcp_modified
 
 
 @logdec
@@ -227,7 +227,7 @@ def upload_to_gcs(
 
 
 @logdec
-def bq_update_main_table_col_descriptions(
+def _bq_update_main_table_col_descriptions(
     dataset_ref: str,
     descriptions: dict,
     gcp: Box = None,
@@ -286,7 +286,7 @@ def bq_update_main_table_col_descriptions(
 
 
 @logdec
-def get_col_descs_from_gcs(
+def _get_col_descs_from_gcs(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
@@ -334,7 +334,7 @@ def get_col_descs_from_gcs(
 
 
 @logdec
-def create_bq_dataset(
+def _create_bq_dataset(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
@@ -391,7 +391,7 @@ def create_bq_dataset(
 
 
 @logdec
-def check_bq_dataset(
+def _check_bq_dataset(
     id: str,
     source: str,
     odata_version: str,
@@ -419,13 +419,15 @@ def check_bq_dataset(
 
     dataset_id = f"{source}_{odata_version}_{id}"
 
-    # Make an API request - will raise an exception if does not exist, causing the decorator to return None
-    client.get_dataset(dataset_id)
-    return True
+    try:
+        client.get_dataset(dataset_id)
+        return True
+    except exceptions.BadRequest:
+        return False
 
 
 @logdec
-def delete_bq_dataset(
+def _delete_bq_dataset(
     id: str,
     source: str = "cbs",
     odata_version: str = None,
@@ -475,11 +477,11 @@ def gcs_to_gbq(
     credentials: Credentials = None,
 ) -> None:  # TODO Return job id
     """Creates a BQ dataset and links all relevant tables from GCS underneath.
-    
+
     Creates a dataset (if does not exist) in Google Big Query, and underneath
     creates permanent tables linked to parquet file stored in Google Storage.
     If dataset exists, removes it and recreates it with most up to date uploaded files (?) # TODO: Is this the best logic?
-    
+
     Parameters
     ----------
     id: str
@@ -524,7 +526,7 @@ def gcs_to_gbq(
     # Set GCP Environment
     # gcp = set_gcp(config=config, gcp_env=gcp_env, source=source)
     # Get metadata
-    meta_gcp = get_metadata_gcp(
+    meta_gcp = _get_metadata_gcp(
         id=id,
         source=source,
         odata_version=odata_version,
@@ -542,14 +544,14 @@ def gcs_to_gbq(
             raise ValueError("odata version must be either 'v3' or 'v4'")
 
     # Check if dataset exists and delete if it does TODO: maybe delete anyway (deleting uses not_found_ok to ignore error if does not exist)
-    if check_bq_dataset(
+    if _check_bq_dataset(
         id=id,
         source=source,
         odata_version=odata_version,
         gcp=gcp,
         credentials=credentials,
     ):
-        delete_bq_dataset(
+        _delete_bq_dataset(
             id=id,
             source=source,
             odata_version=odata_version,
@@ -558,7 +560,7 @@ def gcs_to_gbq(
         )
 
     # Create a dataset in BQ
-    dataset_id = create_bq_dataset(
+    dataset_id = _create_bq_dataset(
         id=id,
         source=source,
         odata_version=odata_version,

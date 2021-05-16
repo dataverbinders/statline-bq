@@ -8,12 +8,12 @@ from box import Box
 from google.oauth2.credentials import Credentials
 
 from statline_bq.statline import (
-    check_v4,
-    get_urls,
+    _check_v4,
+    _get_urls,
     get_metadata_cbs,
-    get_main_table_shape,
+    _get_main_table_shape,
     tables_to_parquet,
-    get_column_descriptions,
+    _get_column_descriptions,
 )
 from statline_bq.gcpl import (
     get_metadata_gcp,
@@ -197,7 +197,7 @@ def cbsodata_to_local(
     [^odatav4]: https://dataportal.cbs.nl/info/ontwikkelaars
     """
     # Get all table-specific urls for the given dataset id
-    urls = get_urls(id=id, odata_version=odata_version, third_party=third_party)
+    urls = _get_urls(id=id, odata_version=odata_version, third_party=third_party)
     # Get dataset metadata
     source_meta = get_metadata_cbs(
         id=id, third_party=third_party, odata_version=odata_version
@@ -210,7 +210,7 @@ def cbsodata_to_local(
             id=id, odata_version=odata_version, source=source, config=config
         )
     # Set main table shape to use for parallel fetching later
-    main_table_shape = get_main_table_shape(source_meta)
+    main_table_shape = _get_main_table_shape(source_meta)
     # Fetch each table from urls, convert to parquet and store locally
     files_parquet = tables_to_parquet(
         id=id,
@@ -234,7 +234,7 @@ def cbsodata_to_local(
         pq.write_table(data_properties_table, data_properties_pq)
 
     # Get columns' descriptions from CBS
-    col_descriptions = get_column_descriptions(urls, odata_version=odata_version)
+    col_descriptions = _get_column_descriptions(urls, odata_version=odata_version)
     # Write column descriptions to json file and store in dataset directory with parquet tables
     dict_to_json_file(
         id=id,
@@ -723,7 +723,7 @@ def main(
             "A third-party dataset cannot have 'cbs' as source: please provide correct 'source' parameter"
         )
     if check_gcp_env(gcp_env):
-        odata_version = check_v4(id=id, third_party=third_party)
+        odata_version = _check_v4(id=id, third_party=third_party)
         # Set gcp environment
         gcp = set_gcp(config, gcp_env, source)
         # Check if upload is needed
