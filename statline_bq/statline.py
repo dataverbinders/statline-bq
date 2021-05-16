@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 import pyarrow as pa
 import dask.bag as db
 
-from statline_bq.utils import create_dir, url_to_ndjson, convert_ndjsons_to_parquet
+from statline_bq.utils import _create_dir, _url_to_ndjson, convert_ndjsons_to_parquet
 from statline_bq.log import logdec
 
 
@@ -462,13 +462,13 @@ def dataset_to_parquet(
         # create directories to store files
         pq_dir = Path(pq_dir)
         ndjson_dir = pq_dir.parent / Path(f"ndjson/{table_name}")
-        create_dir(pq_dir)
-        create_dir(ndjson_dir)
+        _create_dir(pq_dir)
+        _create_dir(ndjson_dir)
 
         # Fetch all urls and dump each as ndjson
         ndjsons_paths = (
             db.from_sequence(table_urls)
-            .map(url_to_ndjson, ndjson_folder=ndjson_dir)
+            .map(_url_to_ndjson, ndjson_folder=ndjson_dir)
             .compute()
         )
 
