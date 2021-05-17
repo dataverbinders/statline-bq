@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import requests
 
-from statline_bq import __version__, config, utils
+from statline_bq import __version__, config, utils, gcpl, statline, main
 
 
 def test_version():
@@ -68,12 +68,7 @@ class TestConfig:
         assert datasets == ("83583NED", "83765NED", "84799NED", "84583NED", "84286NED")
 
 
-class TestUtils:
-    def test_check_gcp_env(self):
-        assert utils.check_gcp_env("dev")
-        with pytest.raises(ValueError):
-            assert utils.check_gcp_env("foo")
-
+class TestStatline:
     @pytest.mark.parametrize(
         "id, version", [("exists_in_v4", "v4"), ("not_exists_in_v4", "v3")]
     )
@@ -82,7 +77,7 @@ class TestUtils:
             return MockResponse(id)
 
         monkeypatch.setattr(requests, "get", mock_get_v4)
-        odata_version = utils.check_v4(id)
+        odata_version = statline._check_v4(id)
         assert odata_version == version
 
     def test_get_metadata_cbs(self):
@@ -107,5 +102,12 @@ class TestUtils:
         file_ = Path(__file__).parent / "data" / metadata
         with open(file_, "r") as f:
             meta = json.load(f)
-        assert utils.get_main_table_shape(meta) == shape
+        assert statline._get_main_table_shape(meta) == shape
+
+
+class TestUtils:
+    def test_check_gcp_env(self):
+        assert utils._check_gcp_env("dev")
+        with pytest.raises(ValueError):
+            assert utils.check_gcp_env("foo")
 
