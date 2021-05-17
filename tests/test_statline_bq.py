@@ -1,7 +1,12 @@
+from datetime import datetime
 import json
 from pathlib import Path
 import pytest
 import requests
+from datetime import datetime
+import filecmp
+
+from google.cloud import storage
 
 from statline_bq import __version__, config, utils, gcpl, statline, main
 
@@ -109,5 +114,32 @@ class TestUtils:
     def test_check_gcp_env(self):
         assert utils._check_gcp_env("dev")
         with pytest.raises(ValueError):
-            assert utils.check_gcp_env("foo")
+            assert utils._check_gcp_env("foo")
 
+
+class TestMain:
+    def test_main_core_v3_gcs(self, tmp_path):
+        ID = "83583NED"
+        SOURCE = "cbs"
+        ODATA_VERSION = "v3"
+        DOWNLOAD_FOLDER = tmp_path
+        print(tmp_path)
+        CONFIG = config.get_config("statline_bq/config.toml")
+
+        PROJECT = "dataverbinders-test"
+        BUCKET = "dataverbinders-test"
+        GCS_FOLDER = f"{SOURCE}/{ODATA_VERSION}/{ID}/{datetime.today().date().strftime('%Y%m%d')}"
+        main.main(id=ID, config=CONFIG, gcp_env="test", endpoint="gcs", force=True)
+        client = storage.Client(project=PROJECT)
+        bucket = client.get_bucket(BUCKET)
+        blobs = bucket.list_blobs(prefix=GCS_FOLDER)
+        assertion_paths = {}
+        for blob in blobs:
+            file_name = blob.name.split("/")[-1]
+            download_file = str(DOWNLOAD_FOLDER) + "/" + file_name
+            blob.download_to_filename(download_file)
+            file_ = Path(__file__).parent / "data" / ID / file_name
+            assertion_paths[download_file] = file_
+        assert assertion_paths
+        for gfile, truth in assertion_paths.items():
+            assert filecmp.cmp(gfile, truth)
