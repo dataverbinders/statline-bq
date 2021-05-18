@@ -118,28 +118,36 @@ class TestUtils:
 
 
 class TestMain:
-    def test_main_core_v3_gcs(self, tmp_path):
-        ID = "83583NED"
-        SOURCE = "cbs"
-        ODATA_VERSION = "v3"
-        DOWNLOAD_FOLDER = tmp_path
-        print(tmp_path)
-        CONFIG = config.get_config("statline_bq/config.toml")
-
+    @pytest.mark.parametrize(
+        "ID, SOURCE, THIRD_PARTY, ODATA_VERSION, FORCE",
+        [
+            ("83583NED", "cbs", False, "v3", True),
+            ("84799NED", "cbs", False, "v3", True),
+            ("83765NED", "cbs", False, "v4", True),
+            ("45012NED", "iv3", True, "v3", True),
+        ],
+    )
+    def test_main(self, ID, SOURCE, ODATA_VERSION, FORCE, tmp_path):
+        CONFIG = config.get_config(
+            "statline_bq/config.toml"
+        )  # TODO: what is a better way to get config in a test environemnt?
         PROJECT = "dataverbinders-test"
         BUCKET = "dataverbinders-test"
         GCS_FOLDER = f"{SOURCE}/{ODATA_VERSION}/{ID}/{datetime.today().date().strftime('%Y%m%d')}"
-        main.main(id=ID, config=CONFIG, gcp_env="test", endpoint="gcs", force=True)
+
+        main.main(id=ID, config=CONFIG, gcp_env="test", endpoint="gcs", force=FORCE)
         client = storage.Client(project=PROJECT)
         bucket = client.get_bucket(BUCKET)
         blobs = bucket.list_blobs(prefix=GCS_FOLDER)
         assertion_paths = {}
         for blob in blobs:
             file_name = blob.name.split("/")[-1]
-            download_file = str(DOWNLOAD_FOLDER) + "/" + file_name
+            download_file = str(tmp_path) + "/" + file_name
             blob.download_to_filename(download_file)
-            file_ = Path(__file__).parent / "data" / ID / file_name
-            assertion_paths[download_file] = file_
+            truth_file = Path(__file__).parent / "data" / ID / file_name
+            assertion_paths[download_file] = truth_file
+        # Assert at least one blob exists
         assert assertion_paths
+        # Assert each file against source
         for gfile, truth in assertion_paths.items():
             assert filecmp.cmp(gfile, truth)
