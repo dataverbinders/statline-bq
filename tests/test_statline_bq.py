@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 import pytest
 import requests
-from datetime import datetime
 import filecmp
 
 from google.cloud import storage
@@ -110,6 +109,40 @@ class TestStatline:
         assert statline._get_main_table_shape(meta) == shape
 
 
+class TestGcpl:
+    def test_upload_to_gcs(self, tmpdir):
+        file_names = ["test_1.txt", "test_2"]
+        f1 = tmpdir.join(file_names[0])
+        f2 = tmpdir.join(file_names[1])
+        with open(f1, "w+") as f:
+            f.write(
+                """
+            Some_text
+            """
+            )
+        with open(f2, "w+") as f:
+            f.write(
+                """
+            different text
+            in several
+            rows
+            """
+            )
+        CONFIG = config.get_config(
+            "statline_bq/config.toml"
+        )  # TODO: what is a better way to get config in a test environment?
+        gcp = CONFIG.gcp.test
+        gcs_folder = gcpl.upload_to_gcs(
+            tmpdir, source="test", odata_version="0", id="NO_ID", gcp=gcp
+        )
+        client = storage.Client(project=gcp.project_id)
+        blob_names = [
+            blob.name.split("/")[-1]
+            for blob in client.list_blobs(gcp.bucket, prefix=gcs_folder)
+        ]
+        assert file_names == blob_names
+
+
 class TestUtils:
     def test_check_gcp_env(self):
         assert utils._check_gcp_env("dev")
@@ -127,18 +160,25 @@ class TestMain:
             ("45012NED", "iv3", True, "v3", True),
         ],
     )
-    def test_main(self, ID, SOURCE, ODATA_VERSION, FORCE, tmp_path):
+    def test_main(self, ID, SOURCE, THIRD_PARTY, ODATA_VERSION, FORCE, tmp_path):
         CONFIG = config.get_config(
             "statline_bq/config.toml"
-        )  # TODO: what is a better way to get config in a test environemnt?
+        )  # TODO: what is a better way to get config in a test environment?
         PROJECT = "dataverbinders-test"
         BUCKET = "dataverbinders-test"
         GCS_FOLDER = f"{SOURCE}/{ODATA_VERSION}/{ID}/{datetime.today().date().strftime('%Y%m%d')}"
 
-        main.main(id=ID, config=CONFIG, gcp_env="test", endpoint="gcs", force=FORCE)
+        main.main(
+            id=ID,
+            source=SOURCE,
+            third_party=THIRD_PARTY,
+            config=CONFIG,
+            gcp_env="test",
+            endpoint="gcs",
+            force=FORCE,
+        )
         client = storage.Client(project=PROJECT)
-        bucket = client.get_bucket(BUCKET)
-        blobs = bucket.list_blobs(prefix=GCS_FOLDER)
+        blobs = client.list_blobs(BUCKET, prefix=GCS_FOLDER)
         assertion_paths = {}
         for blob in blobs:
             file_name = blob.name.split("/")[-1]
