@@ -128,9 +128,7 @@ class TestGcpl:
             rows
             """
             )
-        CONFIG = config.get_config(
-            "statline_bq/config.toml"
-        )  # TODO: what is a better way to get config in a test environment?
+        CONFIG = config.get_config("statline_bq/config.toml")
         gcp = CONFIG.gcp.test
         gcs_folder = gcpl.upload_to_gcs(
             tmpdir, source="test", odata_version="0", id="NO_ID", gcp=gcp
@@ -161,13 +159,28 @@ class TestMain:
         ],
     )
     def test_main(self, ID, SOURCE, THIRD_PARTY, ODATA_VERSION, FORCE, tmp_path):
-        CONFIG = config.get_config(
-            "statline_bq/config.toml"
-        )  # TODO: what is a better way to get config in a test environment?
-        PROJECT = "dataverbinders-test"
-        BUCKET = "dataverbinders-test"
+        CONFIG = config.get_config("statline_bq/config.toml")
         GCS_FOLDER = f"{SOURCE}/{ODATA_VERSION}/{ID}/{datetime.today().date().strftime('%Y%m%d')}"
-
+        odata_version = statline._check_v4(ID, THIRD_PARTY)
+        assert (
+            odata_version == ODATA_VERSION
+        ), "The given version does not match the actual version. This might happen if a v3 dataset was updated to v4."
+        new_meta = statline.get_metadata_cbs(
+            id=ID, third_party=THIRD_PARTY, odata_version=ODATA_VERSION
+        )
+        test_metadata_file = (
+            Path(__file__).parent
+            / "data"
+            / ID
+            / f"{SOURCE}.{ODATA_VERSION}.{ID}_Metadata.json"
+        )
+        with open(test_metadata_file, "r",) as f:
+            test_meta = json.load(f)
+        new_modified = new_meta.get("Modified")
+        test_modified = test_meta.get("Modified")
+        assert (
+            new_modified == test_modified
+        ), "The 'Modified' metadata fields do not match. This might happen if a dataset was updated."
         main.main(
             id=ID,
             source=SOURCE,
@@ -177,8 +190,8 @@ class TestMain:
             endpoint="gcs",
             force=FORCE,
         )
-        client = storage.Client(project=PROJECT)
-        blobs = client.list_blobs(BUCKET, prefix=GCS_FOLDER)
+        client = storage.Client(project=CONFIG.gcp.test.project_id)
+        blobs = client.list_blobs(CONFIG.gcp.test.bucket, prefix=GCS_FOLDER)
         assertion_paths = {}
         for blob in blobs:
             file_name = blob.name.split("/")[-1]
