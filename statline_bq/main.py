@@ -585,6 +585,7 @@ def main(
 
 
 if __name__ == "__main__":
+    # UNNECESSARY COMMENT
     from statline_bq.config import get_config
 
     config = get_config("./statline_bq/config.toml")
