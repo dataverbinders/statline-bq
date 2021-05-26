@@ -10,7 +10,7 @@ on:
     branches: [ master ]
 
 jobs:
-  build:
+  build_test:
 
     runs-on: ubuntu-latest
     env:
@@ -36,4 +36,6 @@ jobs:
     - name: Install dependencies
       run: poetry install --no-interaction
     - name: Run unit tests
+      env:
+        GOOGLE_APPLICATION_CREDENTIALS: ${ secrets.GCP_CREDENTIALS }}
       run: pytest
