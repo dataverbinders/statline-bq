@@ -37,5 +37,5 @@ jobs:
       run: poetry install --no-interaction
     - name: Run unit tests
       env:
-        GOOGLE_APPLICATION_CREDENTIALS: ${ secrets.GCP_CREDENTIALS }}
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
       run: pytest
