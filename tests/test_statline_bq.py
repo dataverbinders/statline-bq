@@ -3,9 +3,9 @@ import json
 from pathlib import Path
 import pytest
 import requests
-import filecmp
 
 from google.cloud import storage
+import pyarrow.parquet as pq
 
 from statline_bq import __version__, config, utils, gcpl, statline, main
 
@@ -203,4 +203,14 @@ class TestMain:
         assert assertion_paths
         # Assert each file against source
         for gfile, truth in assertion_paths.items():
-            assert filecmp.cmp(gfile, truth)
+            if gfile.split(".")[-1] == "parquet":
+                g_table = pq.read_table(gfile)
+                truth_table = pq.read_table(truth)
+                assert truth_table.equals(g_table)
+            else:
+                with open(gfile, "r") as g:
+                    with open(truth, "r") as t:
+                        g_string = json.dumps(json.load(g), sort_keys=True)
+                        truth_string = json.dumps(json.load(t), sort_keys=True)
+                assert g_string == truth_string
+
