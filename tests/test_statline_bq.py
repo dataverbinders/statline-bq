@@ -210,7 +210,10 @@ class TestMain:
             else:
                 with open(gfile, "r") as g:
                     with open(truth, "r") as t:
-                        g_string = json.dumps(json.load(g), sort_keys=True)
-                        truth_string = json.dumps(json.load(t), sort_keys=True)
-                assert g_string == truth_string
-
+                        g_meta, t_meta = json.load(g), json.load(t)
+                        _, _ = g_meta.pop("ID", None), t_meta.pop("ID", None)
+                        g_string, t_string = (
+                            json.dumps(g_meta, sort_keys=True),
+                            json.dumps(t_meta, sort_keys=True),
+                        )
+                assert g_string == t_string
