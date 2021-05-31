@@ -177,16 +177,17 @@ def _cbsodata_to_local(
         pq.write_table(data_properties_table, data_properties_pq)
 
     # Get columns' descriptions from CBS
-    col_descriptions = _get_column_descriptions(urls, odata_version=odata_version)
-    # Write column descriptions to json file and store in dataset directory with parquet tables
-    dict_to_json_file(
-        id=id,
-        dict=col_descriptions,
-        dir=pq_dir,
-        suffix="ColDescriptions",
-        source=source,
-        odata_version=odata_version,
-    )
+    if odata_version == "v3":
+        col_descriptions = _get_column_descriptions(urls, odata_version=odata_version)
+        # Write column descriptions to json file and store in dataset directory with parquet tables
+        dict_to_json_file(
+            id=id,
+            dict=col_descriptions,
+            dir=pq_dir,
+            suffix="ColDescriptions",
+            source=source,
+            odata_version=odata_version,
+        )
     # Write metadata to json file and store in dataset directory with parquet tables
     dict_to_json_file(
         id=id,
@@ -349,18 +350,16 @@ def _cbsodata_to_gbq(
         gcp=gcp,
         credentials=credentials,
     )
-    # Add column description to main table
-    desc_dict = _get_col_descs_from_gcs(
-        id=id,
-        source=source,
-        odata_version=odata_version,
-        gcp=gcp,
-        gcs_folder=gcs_folder,
-        credentials=credentials,
-    )
-
     # Add column descriptions to main table (only relevant for v3, as v4 is a "long format")
     if odata_version == "v3":
+        desc_dict = _get_col_descs_from_gcs(
+            id=id,
+            source=source,
+            odata_version=odata_version,
+            gcp=gcp,
+            gcs_folder=gcs_folder,
+            credentials=credentials,
+        )
         _bq_update_main_table_col_descriptions(
             dataset_ref=dataset_ref,
             descriptions=desc_dict,
@@ -589,7 +588,7 @@ if __name__ == "__main__":
 
     config = get_config("./statline_bq/config.toml")
     # Test cbs core dataset, odata_version is v3
-    main("83583NED", config=config, gcp_env="dev", endpoint="bq", force=True)
+    # main("83583NED", config=config, gcp_env="dev", endpoint="bq", force=True)
     # Test cbs core dataset, odata_version is v3 - local only
     # main("83583NED", config=config, endpoint="local", local_dir="./temp/")
     # # Test skipping a dataset, odata_version is v3
@@ -597,7 +596,7 @@ if __name__ == "__main__":
     # Test cbs core dataset, odata_version is v3, contaiing empty url (CategoryGroups)
     # local_folder = main("84799NED", config=config, gcp_env="dev", force=True)
     # Test cbs core dataset, odata_version is v4
-    # main("83765NED", config=config, gcp_env="dev", force=True)
+    main("83765NED", config=config, gcp_env="dev", force=True)
     # Test external dataset, odata_version is v3
     # main(
     #     "45012NED",
