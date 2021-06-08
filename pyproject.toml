@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "statline-bq"
-version = "0.1.2"
+version = "0.2.0"
 description = "Library to upload CBS open datasets into Google Cloud Platform"
 authors = ["Daniel Kapitan <daniel@kapitan.net>", "Amit Gal <amitgalmail@gmail.com>"]
 license = "MIT"
