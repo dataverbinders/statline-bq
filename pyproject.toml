@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "Library to upload CBS open datasets into Google Cloud Platform"
 authors = ["Daniel Kapitan <daniel@kapitan.net>", "Amit Gal <amitgalmail@gmail.com>"]
 license = "MIT"
-homepage = "https://wijzijn.dedataverbinders.nl/"
+homepage = "https://github.com/dataverbinders/statline-bq"
 
 [tool.poetry.dependencies]
 python = "^3.8"
