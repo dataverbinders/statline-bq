@@ -137,7 +137,7 @@ def get_metadata_cbs(id: str, third_party: bool, odata_version: str) -> dict:
     catalog_urls = {
         ("v3", True): "https://dataderden.cbs.nl/ODataCatalog/Tables?$format=json",
         ("v3", False): "https://opendata.cbs.nl/ODataCatalog/Tables?$format=json",
-        ("v4", False): f"https://odata4.cbs.nl/CBS/{id}/properties",
+        ("v4", False): f"https://odata4.cbs.nl/CBS/{id}/Properties",
     }
     if odata_version == "v3":
         url = catalog_urls[(odata_version, third_party)]
@@ -489,3 +489,14 @@ def dataset_to_parquet(
             files_parquet.add(pq_path)
 
     return files_parquet
+
+
+if __name__ == "__main__":
+    id = "85010NED"
+    third_party = False
+    # odata_version = "v3"
+    odata_version = _check_v4(id=id, third_party=third_party)
+    print(odata_version)
+    
+    meta = get_metadata_cbs(id=id, third_party=third_party, odata_version=odata_version)
+    print(meta)
