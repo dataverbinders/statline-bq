@@ -80,6 +80,9 @@ def _skip_dataset(
         gcp=gcp,
         credentials=credentials,
     )
+    # If no previous version of this dataset exists, _get_metadata_gcp returns None
+    if gcp_meta is None:
+        return False
     cbs_modified = source_meta.get("Modified")
     gcp_modified = gcp_meta.get("Modified")
     # Don't skip if one of the dates is None
@@ -134,7 +137,7 @@ def _cbsodata_to_local(
     -------
     pq_dir : Path
         path to directory containing local converted files
-    
+
     files_parquet : set of Paths
         A set with paths of local parquet files
     """
@@ -235,7 +238,7 @@ def _cbsodata_to_gcs(
 
     gcp_env: str
         determines which GCP configuration to use from config.gcp
-    
+
     force : bool, default = False
         If set to True, processes datasets, even if Modified dates are
         identical in source and target locations.
@@ -310,7 +313,7 @@ def _cbsodata_to_gbq(
 
     gcp_env: str
         determines which GCP configuration to use from config.gcp
-    
+
     force : bool, default = False
         If set to True, processes datasets, even if Modified dates are
         identical in source and target locations.
@@ -417,11 +420,11 @@ def main(
         * 'local' stores the parquet files locally
         * 'gcs' uploads the parquet file to Google Cloud Storage
         * 'bq' uploads the parquet file to Google Cloud Storage and creates a linked dataset in BigQuery
-    
+
     local_dir: str or Path, default=None
         If endpoint='local', determines the folder to store parquet files. If set to None,
         creates a folder within the temp directories of the OS based on the dataset source and id.
-    
+
     force: bool, default=False
         If set to True, processes datasets, even if Modified dates are
         identical in source and target locations.
@@ -466,7 +469,7 @@ def main(
     ...     endpoint="bq",
     ...     force=False
     ... )
-    
+
 
     Notes
     -----
@@ -510,13 +513,13 @@ def main(
     - "cbs.v4.83765NED_Dimensions" - Information regarding the dimensions
 
     Additionally, this function will upload all other tables related to the dataset, except for `Properties`.
-        
+
     These may include:
 
     - "cbs.v4.83765NED_MeasureGroups" - Describing the hierarchy of the Measures
 
     And, for each Dimension listed in the `Dimensions` table (i.e. `{Dimension_1}`)
-    
+
     - "cbs.v4.83765NED_{Dimension_1}Codes"
     - "cbs.v4.83765NED_{Dimension_1}Groups" (IF IT EXISTS)
 
