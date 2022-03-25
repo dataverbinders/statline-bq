@@ -2,7 +2,10 @@ from pathlib import Path
 
 import click
 
-from statline_bq.utils import set_gcp, main
+from statline_bq.gcpl import _set_gcp
+from statline_bq.main import main
+
+# from statline_bq.utils import set_gcp, main
 from statline_bq.config import get_config, get_datasets
 
 
@@ -43,7 +46,7 @@ def upload_datasets(
     The GCP settings, should be manually written into "config.toml".
 
     To upload a single dataset, provide its dataset id as a parameter.
-    
+
     To upload multiple datasets, their ids sould be manually written into
     "datasets.toml".
 
@@ -63,7 +66,7 @@ def upload_datasets(
             )
             return None
     gcp_env = gcp_env.lower()
-    gcp_project = set_gcp(config, gcp_env, source)
+    gcp_project = _set_gcp(config, gcp_env, source)
     click.echo("The following datasets will be downloaded from CBS and uploaded into:")
     click.echo("")
     click.echo(f"Project: {gcp_project.project_id}")

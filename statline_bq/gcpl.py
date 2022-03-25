@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 @logdec
 def _set_gcp(config: Box, gcp_env: str, source: str) -> Box:
-    """Sets the desired GCP donciguration
+    """Sets the desired GCP configuration
 
     Parameters
     ----------
@@ -133,7 +133,10 @@ def _get_metadata_gcp(
     gcs_folder = _get_latest_folder(gcs_folder, gcp)
     blob = bucket.get_blob(f"{gcs_folder}/{source}.{odata_version}.{id}_Metadata.json")
     # If no such blob exists, the error will be caught by @logdec, and None would be returned instead
-    meta = json.loads(blob.download_as_string())
+    if blob:
+        meta = json.loads(blob.download_as_string())
+    else:
+        meta = None
     return meta
 
 
@@ -544,20 +547,20 @@ def gcs_to_gbq(
             raise ValueError("odata version must be either 'v3' or 'v4'")
 
     # Check if dataset exists and delete if it does TODO: maybe delete anyway (deleting uses not_found_ok to ignore error if does not exist)
-    if _check_bq_dataset(
+    # if _check_bq_dataset(
+    #     id=id,
+    #     source=source,
+    #     odata_version=odata_version,
+    #     gcp=gcp,
+    #     credentials=credentials,
+    # ):
+    _delete_bq_dataset(
         id=id,
         source=source,
         odata_version=odata_version,
         gcp=gcp,
         credentials=credentials,
-    ):
-        _delete_bq_dataset(
-            id=id,
-            source=source,
-            odata_version=odata_version,
-            gcp=gcp,
-            credentials=credentials,
-        )
+    )
 
     # Create a dataset in BQ
     dataset_id = _create_bq_dataset(
